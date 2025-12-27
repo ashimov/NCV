@@ -1,6 +1,16 @@
 ---
 nomad_version: "1.7.0"
-nomad_package: nomad{% if nomad_version is defined and nomad_version != 'latest' %}={{ nomad_version }}{% endif %}
+nomad_package: >-
+  {{
+    'nomad'
+    if nomad_version is not defined or nomad_version == 'latest'
+    else
+      (
+        'nomad=' + nomad_version
+        if (ansible_facts | default({})).get('os_family', '') == 'Debian'
+        else 'nomad-' + nomad_version + '*'
+      )
+  }}
 
 nomad_user: nomad
 nomad_group: nomad

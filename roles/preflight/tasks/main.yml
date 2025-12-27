@@ -1,0 +1,93 @@
+---
+- name: Preflight checks
+  when: preflight_enabled | bool
+  block:
+    - name: Assert supported OS
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              ansible_facts["os_family"] == "Debian"
+              and ansible_facts["distribution"] in preflight_debian_distributions
+              and ansible_facts["distribution_version"] in preflight_ubuntu_versions
+            )
+            or
+            (
+              ansible_facts["os_family"] == "RedHat"
+              and ansible_facts["distribution"] in preflight_redhat_distributions
+            )
+        fail_msg: >-
+          Unsupported OS: {{ ansible_facts["distribution"] }}
+          {{ ansible_facts["distribution_version"] }}.
+          Supported: Ubuntu {{ preflight_ubuntu_versions | join(", ") }},
+          Oracle Linux, Alma Linux.
+        success_msg: "OS {{ ansible_facts['distribution'] }} is supported."
+
+    - name: Assert node_ip is set
+      ansible.builtin.assert:
+        that:
+          - node_ip is defined
+          - node_ip | length > 0
+        fail_msg: "node_ip is empty. Set ansible_host or node_ip for each host."
+
+    - name: Build node_ip list
+      ansible.builtin.set_fact:
+        preflight_node_ips: "{{ groups['all'] | map('extract', hostvars, 'node_ip') | list }}"
+      run_once: true
+
+    - name: Assert node_ip values are unique
+      ansible.builtin.assert:
+        that:
+          - preflight_node_ips | length == (preflight_node_ips | unique | length)
+        fail_msg: "Duplicate node_ip values found in inventory."
+      when: preflight_check_unique_node_ip | bool
+      run_once: true
+
+    - name: Assert Consul server group present when needed
+      ansible.builtin.assert:
+        that:
+          - groups.get('consul_servers', []) | length > 0
+        fail_msg: "consul_servers group must contain at least one host."
+      when: >-
+        preflight_require_consul | bool and
+        (
+          (groups.get('consul_servers', []) | length > 0)
+          or (groups.get('consul_clients', []) | length > 0)
+        )
+      run_once: true
+
+    - name: Assert Nomad server group present when needed
+      ansible.builtin.assert:
+        that:
+          - groups.get('nomad_servers', []) | length > 0
+        fail_msg: "nomad_servers group must contain at least one host."
+      when: >-
+        preflight_require_nomad | bool and
+        (
+          (groups.get('nomad_servers', []) | length > 0)
+          or (groups.get('nomad_clients', []) | length > 0)
+        )
+      run_once: true
+
+    - name: Assert Vault server group present when required
+      ansible.builtin.assert:
+        that:
+          - groups.get('vault_servers', []) | length > 0
+        fail_msg: "vault_servers group must contain at least one host."
+      when: preflight_require_vault | bool
+      run_once: true
+
+    - name: Assert PKI target groups exist when enabled
+      ansible.builtin.assert:
+        that:
+          - pki_target_groups | length > 0
+          - (pki_target_groups | difference(groups.keys() | list)) | length == 0
+        fail_msg: "pki_target_groups must reference existing inventory groups."
+      when: preflight_require_pki | bool and pki_generate | bool
+      run_once: true
+
+    - name: Warn when Consul gossip encryption is unset
+      ansible.builtin.debug:
+        msg: "consul_encrypt is empty; gossip traffic is not encrypted."
+      when: preflight_warn_on_insecure_defaults | bool and (consul_encrypt | length == 0)
+      run_once: true

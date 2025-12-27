@@ -6,6 +6,11 @@ advertise_addr = "{{ consul_advertise_addr }}"
 client_addr = "{{ consul_client_addr }}"
 server = {{ 'true' if consul_server else 'false' }}
 
+ports {
+  http = {{ -1 if consul_tls_enabled and consul_http_disable else consul_http_port }}
+  https = {{ consul_https_port if consul_tls_enabled else -1 }}
+}
+
 {% if consul_server %}
 bootstrap_expect = {{ consul_bootstrap_expect }}
 {% endif %}

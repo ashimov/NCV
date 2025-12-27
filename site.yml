@@ -1,4 +1,18 @@
 ---
+- name: Preflight checks (optional)
+  hosts: "all:!pki_ca_host:!load_balancer:!localhost"
+  gather_facts: true
+  roles:
+    - role: preflight
+      tags: [preflight]
+
+- name: Cleanup (optional)
+  hosts: "all:!pki_ca_host:!load_balancer:!localhost"
+  gather_facts: false
+  roles:
+    - role: cleanup
+      tags: [cleanup]
+
 - name: Common baseline
   hosts: "all:!pki_ca_host"
   gather_facts: true
@@ -17,6 +31,8 @@
   hosts: pki_ca_host
   gather_facts: false
   connection: local
+  vars:
+    ansible_python_interpreter: "{{ pki_python_interpreter }}"
   roles:
     - role: pki
       tags: [pki]

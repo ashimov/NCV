@@ -1,13 +1,19 @@
 ---
 cluster_name: ncv
-cluster_domain: example.internal
+cluster_domain: ashimov.com
 
 # Common network defaults (override per-host if needed)
-node_ip: "{{ ansible_host | default(inventory_hostname) }}"
+node_ip: >-
+  {{
+    ansible_host
+      | default(ansible_facts.get('default_ipv4', {}).get('address', ''))
+      | default(inventory_hostname)
+  }}
 
 # PKI defaults
 pki_generate: true
 pki_root: "{{ playbook_dir }}/pki"
+pki_python_interpreter: "/opt/homebrew/bin/python3"
 pki_target_groups:
   - consul_servers
   - consul_clients
@@ -15,9 +21,9 @@ pki_target_groups:
   - nomad_clients
   - vault_servers
 pki_ca_common_name: "{{ cluster_name }}-ca"
-pki_org: "NCV"
-pki_org_unit: "Platform"
-pki_country: "US"
+pki_org: "ASHIMOV"
+pki_org_unit: "IT"
+pki_country: "KZ"
 
 # Consul defaults
 consul_datacenter: dc1
@@ -27,7 +33,7 @@ consul_tls_dir: /etc/consul.d/tls
 consul_bind_addr: "{{ node_ip }}"
 consul_advertise_addr: "{{ node_ip }}"
 consul_client_addr: "0.0.0.0"
-consul_retry_join: "{{ groups['consul_servers'] | default([]) }}"
+consul_retry_join: "{{ groups['consul_servers'] | default([]) | map('extract', hostvars, 'node_ip') | list }}"
 consul_retry_join_cloud_enabled: false
 consul_retry_join_cloud: []
 consul_ui: true
@@ -45,11 +51,15 @@ nomad_config_dir: /etc/nomad.d
 nomad_tls_dir: /etc/nomad.d/tls
 nomad_bind_addr: "{{ node_ip }}"
 nomad_advertise_addr: "{{ node_ip }}"
-nomad_retry_join: "{{ groups['nomad_servers'] | default([]) }}"
+nomad_retry_join: "{{ groups['nomad_servers'] | default([]) | map('extract', hostvars, 'node_ip') | list }}"
 nomad_retry_join_cloud_enabled: false
 nomad_retry_join_cloud: []
 nomad_consul_enabled: true
-nomad_consul_address: "127.0.0.1:8500"
+nomad_consul_address: >-
+  127.0.0.1:{{
+    (nomad_consul_tls_enabled | bool)
+      | ternary(consul_https_port, consul_http_port)
+  }}
 nomad_enable_raw_exec: false
 nomad_acl_enabled: false
 nomad_consul_tls_enabled: "{{ consul_tls_enabled }}"
@@ -91,7 +101,11 @@ vault_tls_key_src: "{{ pki_root }}/hosts/{{ inventory_hostname }}/key.pem"
 vault_tls_require_client_cert: false
 
 # Vault storage (consul)
-vault_consul_address: "127.0.0.1:8500"
+vault_consul_address: >-
+  127.0.0.1:{{
+    (consul_tls_enabled | bool)
+      | ternary(consul_https_port, consul_http_port)
+  }}
 vault_consul_token: ""
 
 # Vault auto-unseal (optional)

@@ -1,0 +1,48 @@
+---
+cleanup_enabled: false
+cleanup_confirm: false
+
+cleanup_services:
+  - consul
+  - nomad
+  - vault
+cleanup_stop_services: true
+cleanup_disable_services: true
+
+cleanup_remove_packages: false
+cleanup_packages:
+  - consul
+  - nomad
+  - vault
+
+cleanup_remove_users: false
+cleanup_remove_groups: false
+cleanup_users:
+  - consul
+  - nomad
+  - vault
+cleanup_groups:
+  - consul
+  - nomad
+  - vault
+
+cleanup_remove_data: false
+cleanup_remove_config: false
+cleanup_remove_tls: false
+cleanup_remove_logs: false
+cleanup_remove_local_pki: false
+
+cleanup_data_paths:
+  - "{{ consul_data_dir }}"
+  - "{{ nomad_data_dir }}"
+  - "{{ vault_data_dir }}"
+cleanup_config_paths:
+  - "{{ consul_config_dir }}"
+  - "{{ nomad_config_dir }}"
+  - "{{ vault_config_dir }}"
+cleanup_tls_paths:
+  - "{{ consul_tls_dir }}"
+  - "{{ nomad_tls_dir }}"
+  - "{{ nomad_consul_tls_dir }}"
+  - "{{ vault_tls_dir }}"
+cleanup_log_paths: []

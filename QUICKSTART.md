@@ -91,6 +91,10 @@ firewall_allow_cidrs:
 ### 3. Deploy
 
 ```bash
+# Optional: Preflight checks
+ansible-playbook -i inventories/quickstart/hosts.yml site.yml --tags preflight \
+  -e preflight_enabled=true
+
 # Full deployment (5-10 minutes)
 ansible-playbook -i inventories/quickstart/hosts.yml site.yml
 
@@ -99,6 +103,18 @@ ansible-playbook -i inventories/quickstart/hosts.yml site.yml --tags pki
 ansible-playbook -i inventories/quickstart/hosts.yml site.yml --tags consul
 ansible-playbook -i inventories/quickstart/hosts.yml site.yml --tags nomad
 ansible-playbook -i inventories/quickstart/hosts.yml site.yml --tags vault
+```
+
+### Cleanup (Destructive, Optional)
+
+```bash
+# Stop services and remove data/config/TLS (use with care)
+ansible-playbook -i inventories/quickstart/hosts.yml site.yml --tags cleanup \
+  -e cleanup_enabled=true \
+  -e cleanup_confirm=true \
+  -e cleanup_remove_data=true \
+  -e cleanup_remove_config=true \
+  -e cleanup_remove_tls=true
 ```
 
 ### 4. Verify

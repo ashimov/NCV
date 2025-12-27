@@ -1,2 +1,4 @@
 ---
 consul_server: false
+pki_sans:
+  - "DNS:client.{{ consul_datacenter }}.consul"

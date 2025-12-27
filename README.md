@@ -27,6 +27,8 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
 - ✅ **Clean role structure** following Ansible best practices
 - ✅ **Comprehensive defaults** - works out of the box
 - ✅ **Extensive documentation** with examples
+- ✅ **Preflight checks** to validate OS, inventory, and PKI targets
+- ✅ **Cleanup role** for safe resets before fresh installs
 - ✅ **CI/CD ready** with ansible-lint and yamllint configurations
 - ✅ **Galaxy compatible** with proper role metadata
 
@@ -48,6 +50,8 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
   - [Load Balancer Planning](#load-balancer-planning)
   - [Version Management](#version-management)
 - [Operations](#operations)
+  - [Preflight Checks](#preflight-checks)
+  - [Cleanup (Reset)](#cleanup-reset)
   - [Initial Deployment](#initial-deployment)
   - [Cluster Scaling](#cluster-scaling)
   - [Certificate Renewal](#certificate-renewal)
@@ -61,6 +65,7 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
 | OS | Versions | Status |
 |---|---|---|
 | Ubuntu | 22.04 (Jammy), 24.04 (Noble) | ✅ Fully Supported |
+| Debian | 11 (Bullseye), 12 (Bookworm) | ✅ Fully Supported |
 | Oracle Linux | 8, 9 | ✅ Fully Supported |
 | AlmaLinux | 8, 9 | ✅ Fully Supported |
 | Rocky Linux | 8, 9 | ✅ Fully Supported |
@@ -632,6 +637,28 @@ consul_version: "latest"
 - ✅ Rollback capability
 
 ## 🔧 Operations
+
+### Preflight Checks
+
+Validate inventory and host requirements before deploying:
+
+```bash
+ansible-playbook -i inventories/prod/hosts.yml site.yml --tags preflight \
+  -e preflight_enabled=true
+```
+
+### Cleanup (Reset)
+
+Stop services and remove data/config/TLS before a clean install:
+
+```bash
+ansible-playbook -i inventories/prod/hosts.yml site.yml --tags cleanup \
+  -e cleanup_enabled=true \
+  -e cleanup_confirm=true \
+  -e cleanup_remove_data=true \
+  -e cleanup_remove_config=true \
+  -e cleanup_remove_tls=true
+```
 
 ### Initial Deployment
 

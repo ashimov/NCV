@@ -1,6 +1,16 @@
 ---
 vault_version: "1.15.0"
-vault_package: vault{% if vault_version is defined and vault_version != 'latest' %}={{ vault_version }}{% endif %}
+vault_package: >-
+  {{
+    'vault'
+    if vault_version is not defined or vault_version == 'latest'
+    else
+      (
+        'vault=' + vault_version
+        if (ansible_facts | default({})).get('os_family', '') == 'Debian'
+        else 'vault-' + vault_version + '*'
+      )
+  }}
 
 vault_user: vault
 vault_group: vault

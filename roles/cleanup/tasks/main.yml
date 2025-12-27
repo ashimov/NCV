@@ -1,0 +1,81 @@
+---
+- name: Assert cleanup confirmation
+  ansible.builtin.assert:
+    that:
+      - cleanup_confirm | bool
+    fail_msg: "Set cleanup_confirm=true to allow destructive cleanup actions."
+  when: cleanup_enabled | bool
+  run_once: true
+
+- name: Cleanup services and data
+  when: cleanup_enabled | bool and cleanup_confirm | bool
+  block:
+    - name: Stop services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop: "{{ cleanup_services }}"
+      when: cleanup_stop_services | bool
+      failed_when: false
+      become: true
+
+    - name: Disable services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: false
+      loop: "{{ cleanup_services }}"
+      when: cleanup_disable_services | bool
+      failed_when: false
+      become: true
+
+    - name: Remove packages
+      ansible.builtin.package:
+        name: "{{ cleanup_packages }}"
+        state: absent
+      when: cleanup_remove_packages | bool
+      become: true
+
+    - name: Remove users
+      ansible.builtin.user:
+        name: "{{ item }}"
+        state: absent
+        remove: true
+      loop: "{{ cleanup_users }}"
+      when: cleanup_remove_users | bool
+      failed_when: false
+      become: true
+
+    - name: Remove groups
+      ansible.builtin.group:
+        name: "{{ item }}"
+        state: absent
+      loop: "{{ cleanup_groups }}"
+      when: cleanup_remove_groups | bool
+      failed_when: false
+      become: true
+
+    - name: Build cleanup path list
+      ansible.builtin.set_fact:
+        cleanup_paths: >-
+          {{
+            (cleanup_remove_data | bool) | ternary(cleanup_data_paths, [])
+            + (cleanup_remove_config | bool) | ternary(cleanup_config_paths, [])
+            + (cleanup_remove_tls | bool) | ternary(cleanup_tls_paths, [])
+            + (cleanup_remove_logs | bool) | ternary(cleanup_log_paths, [])
+          }}
+
+    - name: Remove selected paths
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ cleanup_paths | default([]) | unique }}"
+      when: cleanup_paths | default([]) | length > 0
+      become: true
+
+    - name: Remove local PKI directory
+      ansible.builtin.file:
+        path: "{{ pki_root }}"
+        state: absent
+      when: cleanup_remove_local_pki | bool
+      delegate_to: localhost
+      run_once: true

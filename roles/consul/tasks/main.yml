@@ -54,6 +54,7 @@
     mode: "0644"
   when: consul_tls_enabled
   become: true
+  notify: Restart consul
 
 - name: Copy Consul TLS certificate
   ansible.builtin.copy:
@@ -64,6 +65,7 @@
     mode: "0644"
   when: consul_tls_enabled
   become: true
+  notify: Restart consul
 
 - name: Copy Consul TLS key
   ansible.builtin.copy:
@@ -75,6 +77,7 @@
   when: consul_tls_enabled
   become: true
   no_log: true
+  notify: Restart consul
 
 - name: Render Consul configuration
   ansible.builtin.template:
@@ -99,13 +102,25 @@
     state: started
   become: true
 
+- name: Apply Consul config changes
+  ansible.builtin.meta: flush_handlers
+
 - name: Wait for Consul to be ready
   ansible.builtin.uri:
-    url: "{{ 'https' if consul_tls_enabled else 'http' }}://127.0.0.1:8500/v1/status/leader"
+    url: >-
+      {{
+        ('https' if consul_tls_enabled else 'http')
+        + '://127.0.0.1:'
+        + ((consul_https_port | string) if consul_tls_enabled else (consul_http_port | string))
+        + '/v1/status/leader'
+      }}
     validate_certs: false
+    client_cert: "{{ consul_tls_enabled | ternary(consul_tls_dir + '/cert.pem', omit) }}"
+    client_key: "{{ consul_tls_enabled | ternary(consul_tls_dir + '/key.pem', omit) }}"
     status_code: 200
   register: consul_ready
   until: consul_ready.status == 200
   retries: 30
   delay: 2
   when: consul_tls_enabled or not consul_tls_enabled
+  become: true
