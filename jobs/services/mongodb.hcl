@@ -33,9 +33,11 @@ variable "env_mongo_initdb_root_username" {
   default = "root"
 }
 
+# WARNING: Change this password in production!
+# Consider using Vault for secrets: see jobs/examples/vault-template-example.hcl
 variable "env_mongo_initdb_root_password" {
   type    = string
-  default = "change_me"
+  default = "change_me"  # TODO: Change before production deployment
 }
 
 job "mongodb" {

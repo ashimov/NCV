@@ -33,9 +33,11 @@ variable "env_keycloak_admin" {
   default = "admin"
 }
 
+# WARNING: Change this password in production!
+# Consider using Vault for secrets: see jobs/examples/vault-template-example.hcl
 variable "env_keycloak_admin_password" {
   type    = string
-  default = "change_me"
+  default = "change_me"  # TODO: Change before production deployment
 }
 
 variable "task_args" {

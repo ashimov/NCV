@@ -28,9 +28,11 @@ variable "db_port" {
   default = 3306
 }
 
+# WARNING: Change this password in production!
+# Consider using Vault for secrets: see jobs/examples/vault-template-example.hcl
 variable "env_mysql_root_password" {
   type    = string
-  default = "change_me"
+  default = "change_me"  # TODO: Change before production deployment
 }
 
 job "mysql" {
