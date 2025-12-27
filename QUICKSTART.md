@@ -78,9 +78,9 @@ cluster_name: quickstart
 cluster_domain: cluster.local
 
 # Defaults are production-ready, but you can customize:
-consul_version: "1.17.0"
-nomad_version: "1.7.0"
-vault_version: "1.15.0"
+consul_version: "1.22.2"
+nomad_version: "1.11.1"
+vault_version: "1.21.1"
 
 # Enable firewall (recommended)
 firewall_enabled: true

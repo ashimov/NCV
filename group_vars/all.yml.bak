@@ -43,7 +43,7 @@ consul_connect_enabled: true
 consul_acl_enabled: true
 consul_acl_default_policy: deny
 consul_acl_down_policy: extend-cache
-consul_encrypt: "ShvXiMkny+Dfwt12Q5jrhoOFophlcUMrTQLFdIrsxJ0="
+consul_encrypt: ""
 
 # Nomad defaults
 nomad_region: global
@@ -108,7 +108,7 @@ vault_consul_address: >-
     (consul_tls_enabled | bool)
       | ternary(consul_https_port, consul_http_port)
   }}
-vault_consul_token: "{{ vault_consul_token_vaulted | default('') }}"
+vault_consul_token: ""
 
 # Vault auto-unseal (optional)
 vault_seal_type: none  # none | awskms | gcpckms | transit

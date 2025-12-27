@@ -60,7 +60,7 @@ acl {
 tls {
   http = true
   rpc = true
-  verify_server_hostname = true
+  verify_server_hostname = {{ nomad_tls_verify_server_hostname | lower }}
   ca_file = "{{ nomad_tls_dir }}/ca.pem"
   cert_file = "{{ nomad_tls_dir }}/cert.pem"
   key_file = "{{ nomad_tls_dir }}/key.pem"

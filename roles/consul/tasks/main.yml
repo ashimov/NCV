@@ -31,6 +31,77 @@
   loop: "{{ groups['consul_servers'] + groups.get('consul_clients', []) }}"
   run_once: true
 
+- name: Check if consul_encrypt key file exists
+  ansible.builtin.stat:
+    path: "{{ pki_root }}/consul_encrypt.key"
+  register: consul_encrypt_file
+  delegate_to: localhost
+  when: consul_encrypt | length == 0
+
+- name: Load consul_encrypt key from file
+  ansible.builtin.slurp:
+    src: "{{ pki_root }}/consul_encrypt.key"
+  register: consul_encrypt_content
+  delegate_to: localhost
+  when:
+    - consul_encrypt | length == 0
+    - consul_encrypt_file.stat.exists | default(false)
+
+- name: Set consul_encrypt fact from file
+  ansible.builtin.set_fact:
+    consul_encrypt: "{{ consul_encrypt_content.content | b64decode | trim }}"
+  when:
+    - consul_encrypt | length == 0
+    - consul_encrypt_content.content is defined
+
+- name: Check if existing Consul configuration has encrypt key
+  ansible.builtin.shell: >
+    grep -oP 'encrypt\s*=\s*"\K[^"]+' {{ consul_config_file }} || echo ""
+  register: existing_encrypt_key
+  changed_when: false
+  failed_when: false
+  become: true
+  when: consul_config_file is file
+
+- name: Detect encrypt key change
+  ansible.builtin.set_fact:
+    consul_encrypt_changed: >-
+      {{
+        (existing_encrypt_key.stdout | default('') | length > 0)
+        and (existing_encrypt_key.stdout != consul_encrypt)
+      }}
+  when: existing_encrypt_key is defined
+
+- name: Stop Consul before clearing data (encrypt key changed)
+  ansible.builtin.systemd:
+    name: consul
+    state: stopped
+  become: true
+  when:
+    - consul_encrypt_changed | default(false)
+    - consul_server | default(false)
+
+- name: Clear Consul data directory (encrypt key changed)
+  ansible.builtin.file:
+    path: "{{ consul_data_dir }}"
+    state: absent
+  become: true
+  when:
+    - consul_encrypt_changed | default(false)
+    - consul_server | default(false)
+
+- name: Recreate Consul data directory
+  ansible.builtin.file:
+    path: "{{ consul_data_dir }}"
+    state: directory
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    mode: "0750"
+  become: true
+  when:
+    - consul_encrypt_changed | default(false)
+    - consul_server | default(false)
+
 - name: Ensure consul group
   ansible.builtin.group:
     name: "{{ consul_group }}"
@@ -150,24 +221,20 @@
       ansible.builtin.meta: flush_handlers
 
     - name: Wait for Consul to be ready
-      ansible.builtin.uri:
-        url: >-
-          {{
-            ('https' if consul_tls_enabled else 'http')
-            + '://127.0.0.1:'
-            + ((consul_https_port | string) if consul_tls_enabled else (consul_http_port | string))
-            + '/v1/status/leader'
-          }}
-        validate_certs: false
-        client_cert: "{{ consul_tls_enabled | ternary(consul_tls_dir + '/cert.pem', omit) }}"
-        client_key: "{{ consul_tls_enabled | ternary(consul_tls_dir + '/key.pem', omit) }}"
-        status_code: 200
+      ansible.builtin.command:
+        cmd: >
+          curl -s -o /dev/null -w "%{http_code}"
+          --cacert {{ consul_tls_dir }}/ca.pem
+          --cert {{ consul_tls_dir }}/cert.pem
+          --key {{ consul_tls_dir }}/key.pem
+          https://{{ ansible_host }}:{{ consul_https_port }}/v1/status/leader
       register: consul_ready
-      until: consul_ready.status == 200
+      until: consul_ready.stdout == "200"
       retries: 30
       delay: 2
-      when: consul_tls_enabled or not consul_tls_enabled
+      changed_when: false
       become: true
+      when: consul_tls_enabled
 
   rescue:
     - name: Restore previous Consul configuration

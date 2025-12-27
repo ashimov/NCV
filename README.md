@@ -11,15 +11,20 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
 ### Security First
 
 - ✅ **TLS enabled by default** for all services (Consul, Nomad, Vault)
+- ✅ **Mutual TLS authentication** with comprehensive certificate SANs (DNS + IP addresses)
 - ✅ **ACLs enabled** by default with token management
-- ✅ **Automated PKI** with local CA generation or external certificate integration
+- ✅ **Automated PKI** with local CA generation (proper CA:TRUE constraints) or external certificate integration
+- ✅ **Gossip encryption** with automatic key distribution and change detection
 - ✅ **Secure secret handling** with `no_log` protection
 - ✅ **Firewall integration** (ufw/firewalld) with sensible defaults including SSH protection
 
 ### Production Ready
 
 - ✅ **Health checks** with automatic retry and timeout for service readiness
+- ✅ **Health checks use correct bind addresses** - services are checked on their actual bind IPs, not 127.0.0.1
 - ✅ **Configuration validation** before deployment (consul validate, nomad config validate)
+- ✅ **Automatic data cleanup** on gossip encryption key changes (prevents cluster drift)
+- ✅ **Cascading cleanup** - Nomad automatically resets when Consul data changes
 - ✅ **Version pinning** for reproducible deployments
 - ✅ **Idempotent operations** - safe to run multiple times
 - ✅ **Multi-cloud support** - AWS, GCP, Azure auto-join capabilities
@@ -44,6 +49,7 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
 - [Configuration](#configuration)
   - [TLS/PKI Setup](#tlspki-setup)
   - [Consul Configuration](#consul-configuration)
+  - [Gossip Encryption](#gossip-encryption)
   - [Nomad Configuration](#nomad-configuration)
   - [Vault Configuration](#vault-configuration)
   - [Firewall Configuration](#firewall-configuration)
@@ -172,9 +178,9 @@ cluster_name: production
 cluster_domain: internal.company.com
 
 # Version control
-consul_version: "1.17.0"
-nomad_version: "1.7.0"
-vault_version: "1.15.0"
+consul_version: "1.22.2"
+nomad_version: "1.11.1"
+vault_version: "1.21.1"
 
 # Network
 node_ip: "{{ ansible_host }}"
@@ -192,6 +198,18 @@ nomad_acl_enabled: false  # Set to true if needed
 firewall_enabled: true
 firewall_allow_cidrs:
   - 10.0.0.0/8  # Your private network
+```
+
+### 3.5. Generate Gossip Encryption Key
+
+Consul requires a shared encryption key for secure gossip communication:
+
+```bash
+# Generate encryption key
+consul keygen > pki/consul_encrypt.key
+
+# The key will be automatically loaded and distributed to all nodes
+# Store this file securely (e.g., Ansible Vault, HashiCorp Vault)
 ```
 
 ### 4. Deploy the Stack
@@ -311,6 +329,96 @@ vault_tls_key_src: /path/to/{{ inventory_hostname }}/key.pem
 - ✅ Pre-flight TLS file existence verification
 - ✅ Automatic certificate distribution with correct permissions
 - ✅ All private keys are handled with `no_log: true`
+- ✅ Certificates include comprehensive SANs: DNS names + IP:127.0.0.1 + IP:{{ ansible_host }}
+- ✅ CA certificates include proper Basic Constraints (CA:TRUE) and key usage extensions
+
+**Certificate Requirements:**
+
+When generating your own certificates, ensure:
+- CA certificate has `basicConstraints = CA:TRUE` and `keyUsage = keyCertSign, cRLSign`
+- Host certificates include:
+  - DNS: `{{ inventory_hostname }}`
+  - DNS: `{{ inventory_hostname }}.node.{{ consul_domain }}`
+  - DNS: `*.service.consul` (for Consul)
+  - IP: `127.0.0.1`
+  - IP: `{{ ansible_host }}`
+
+### Gossip Encryption
+
+#### Server Configuration
+
+```yaml
+# group_vars/consul_servers.yml
+consul_server: true
+consul_bootstrap_expect: 3  # Number of servers for quorum
+```
+
+#### Client Configuration
+
+```yaml
+# group_vars/consul_clients.yml
+consul_server: false
+```
+
+#### ACL Setup
+
+Consul ACLs are enabled by default for enhanced security:
+
+```yaml
+# group_vars/all.yml
+consul_acl_enabled: true
+consul_acl_default_policy: deny
+consul_acl_down_policy: extend-cache
+
+# After bootstrapping, set these tokens:
+consul_acl_agent_token: "your-agent-token"
+consul_acl_default_token: "your-default-token"
+consul_acl_replication_token: "your-replication-token"  # Multi-DC only
+```
+
+**Important:** After initial deployment, bootstrap ACLs and configure tokens. See [Operations - Initial Deployment](#initial-deployment) for detailed ACL bootstrap process.
+
+#### Service Mesh (Consul Connect)
+
+Consul gossip encryption secures cluster communication. The encryption key must be shared across all nodes.
+
+#### Automatic Key Management
+
+Create a key file that will be automatically distributed:
+
+```bash
+# Generate a gossip encryption key
+consul keygen > pki/consul_encrypt.key
+
+# The consul role will automatically:
+# 1. Load this key for all hosts
+# 2. Detect if the key has changed
+# 3. Automatically clear data directories if the key changes
+# 4. Prevent cluster formation issues from key mismatches
+```
+
+**Important:** Store `pki/consul_encrypt.key` in secure vault storage (e.g., Ansible Vault, HashiCorp Vault) for production.
+
+#### Manual Configuration
+
+Alternatively, set the key directly in variables:
+
+```yaml
+# group_vars/all.yml
+consul_encrypt: "fEVFjI8XoZXT6Pz6sS992Zaq+D8s+A79Oi2tVO8NTrI="
+```
+
+#### Key Change Handling
+
+The playbook automatically detects encryption key changes:
+
+1. **Detection**: Compares current key in config with new key from variables
+2. **Service Stop**: Stops Consul service on all affected nodes
+3. **Data Cleanup**: Removes `/opt/consul/*` to clear old keyring data
+4. **Directory Recreation**: Recreates data directory with proper ownership
+5. **Cascading**: Nomad automatically detects Consul changes and clears its own data
+
+This prevents the common "No installed keys could decrypt" error when changing encryption keys.
 
 ### Consul Configuration
 
@@ -345,29 +453,23 @@ consul_acl_default_token: "your-default-token"
 consul_acl_replication_token: "your-replication-token"  # Multi-DC only
 ```
 
-**ACL Bootstrap Process:**
+**Important:** After initial deployment, bootstrap ACLs and configure tokens. See [Operations - Initial Deployment](#initial-deployment) for detailed ACL bootstrap process.
 
-```bash
-# On any Consul server
-consul acl bootstrap
+#### Port Configuration
 
-# Create agent policy
-consul acl policy create -name agent -rules @agent-policy.hcl
+By default, only HTTPS is enabled for enhanced security:
 
-# Create tokens
-consul acl token create -policy-name agent
+```yaml
+# group_vars/all.yml
+consul_http_port: -1          # HTTP disabled
+consul_https_port: 8501       # TLS-only API access
 ```
 
-#### Gossip Encryption
+To enable both HTTP and HTTPS (not recommended for production):
 
-Generate and set a gossip encryption key:
-
-```bash
-# Generate key
-consul keygen
-
-# Set in group_vars/all.yml
-consul_encrypt: "your-32-byte-base64-key"
+```yaml
+consul_http_port: 8500
+consul_https_port: 8501
 ```
 
 #### Service Mesh (Consul Connect)
@@ -407,11 +509,13 @@ Nomad integrates with Consul for service discovery:
 # group_vars/all.yml
 nomad_consul_enabled: true
 nomad_consul_address: "127.0.0.1:8500"
-nomad_consul_token: "your-consul-token"  # Optional, for ACL
+nomad_consul_token: "your-consul-token"  # Required if Consul ACLs enabled
 
 # TLS integration
 nomad_consul_tls_enabled: true  # Auto-enabled if Consul TLS is on
 ```
+
+**Important:** When Consul ACLs are enabled, Nomad requires a token with appropriate permissions to register services and perform health checks.
 
 #### ACL Setup (Optional)
 
@@ -437,7 +541,43 @@ nomad acl bootstrap
 # group_vars/all.yml
 vault_storage_backend: consul
 vault_consul_address: "127.0.0.1:8500"
-vault_consul_token: "your-vault-consul-token"
+vault_consul_token: "{{ vault_consul_token_vaulted | default('') }}"  # Set via Ansible Vault when ACLs are enabled
+```
+
+**ACL Requirements:** When Consul ACLs are enabled, Vault requires a token with:
+- `key:read` and `key:write` permissions on `vault/*` path
+- Service registration permissions for health checks
+
+Create an ACL policy for Vault:
+
+```hcl
+# vault-policy.hcl
+key_prefix "vault/" {
+  policy = "write"
+}
+
+service "vault" {
+  policy = "write"
+}
+
+session_prefix "" {
+  policy = "write"
+}
+```
+
+Apply the policy:
+
+```bash
+consul acl policy create -name vault -rules @vault-policy.hcl
+consul acl token create -policy-name vault -description "Vault storage backend"
+
+Store the token with Ansible Vault to avoid plaintext in inventories:
+
+```bash
+ansible-vault encrypt_string --name vault_consul_token_vaulted "$VAULT_CONSUL_TOKEN" > group_vars/vault_servers.vault.yml
+```
+
+Ansible will load `group_vars/vault_servers.vault.yml` automatically when it is encrypted. The value is exposed to the role as `vault_consul_token` via `vault_consul_token_vaulted`.
 ```
 
 **Option 2: Integrated Raft Storage**
@@ -630,9 +770,9 @@ Control HashiCorp product versions explicitly:
 
 ```yaml
 # group_vars/all.yml
-consul_version: "1.17.0"    # Specific version
-nomad_version: "1.7.0"      # Specific version
-vault_version: "1.15.0"     # Specific version
+consul_version: "1.22.2"    # Specific version
+nomad_version: "1.11.1"     # Specific version
+vault_version: "1.21.1"     # Specific version
 
 # Or use latest (not recommended for production)
 consul_version: "latest"
@@ -651,8 +791,7 @@ consul_version: "latest"
 Validate inventory and host requirements before deploying:
 
 ```bash
-ansible-playbook -i inventories/prod/hosts.yml site.yml --tags preflight \
-  -e preflight_enabled=true
+ansible-playbook -i inventories/prod/hosts.yml playbooks/preflight.yml
 ```
 
 ### Cleanup (Reset)
@@ -670,33 +809,98 @@ ansible-playbook -i inventories/prod/hosts.yml site.yml --tags cleanup \
 
 ### Initial Deployment
 
+Complete deployment workflow with all necessary steps:
+
 ```bash
 # 1. Deploy infrastructure
 ansible-playbook -i inventories/prod/hosts.yml site.yml
 
-# 2. Verify Consul
+# 2. Verify Consul cluster
 consul members
 consul catalog services
 
-# 3. Bootstrap Consul ACLs
+# 3. Bootstrap Consul ACLs (if enabled)
 consul acl bootstrap
+# Save the management token output!
 
-# 4. Verify Nomad
+# 4. Create ACL policies and tokens
+# Agent policy for Consul agents
+cat > agent-policy.hcl <<EOF
+node_prefix "" {
+  policy = "write"
+}
+service_prefix "" {
+  policy = "read"
+}
+EOF
+
+consul acl policy create -name agent -rules @agent-policy.hcl
+export CONSUL_AGENT_TOKEN=$(consul acl token create -policy-name agent -format=json | jq -r .SecretID)
+
+# Nomad policy for service registration
+cat > nomad-policy.hcl <<EOF
+service_prefix "" {
+  policy = "write"
+}
+key_prefix "" {
+  policy = "write"
+}
+EOF
+
+consul acl policy create -name nomad -rules @nomad-policy.hcl
+export NOMAD_CONSUL_TOKEN=$(consul acl token create -policy-name nomad -format=json | jq -r .SecretID)
+
+# Vault policy for storage backend
+cat > vault-policy.hcl <<EOF
+key_prefix "vault/" {
+  policy = "write"
+}
+service "vault" {
+  policy = "write"
+}
+session_prefix "" {
+  policy = "write"
+}
+EOF
+
+consul acl policy create -name vault -rules @vault-policy.hcl
+export VAULT_CONSUL_TOKEN=$(consul acl token create -policy-name vault -format=json | jq -r .SecretID)
+
+# 5. Update inventory with tokens and re-run deployment
+# Add to inventories/prod/group_vars/all.yml:
+#   consul_acl_agent_token: "<CONSUL_AGENT_TOKEN>"
+#   nomad_consul_token: "<NOMAD_CONSUL_TOKEN>"
+#   vault_consul_token_vaulted: "<VAULT_CONSUL_TOKEN>"  # store with ansible-vault encrypt_string
+
+ansible-playbook -i inventories/prod/hosts.yml site.yml
+
+# 6. Verify Nomad cluster
 nomad server members
 nomad node status
 
-# 5. Bootstrap Nomad ACLs (if enabled)
+# 7. Bootstrap Nomad ACLs (if enabled)
 nomad acl bootstrap
+# Save the management token output!
 
-# 6. Initialize Vault
+# 8. Initialize Vault
 vault operator init
-vault operator unseal  # Or auto-unseal
+# CRITICAL: Save unseal keys and root token securely!
 
-# 7. Configure Vault
+# 9. Unseal Vault (or auto-unseal handles this)
+vault operator unseal  # Repeat 3 times with different keys
+
+# 10. Configure Vault
 export VAULT_TOKEN="root-token"
 vault auth enable approle
 vault secrets enable -path=secret kv-v2
+
+# 11. Verify full stack
+consul members        # Should show all nodes
+nomad node status     # Should show all clients
+vault status          # Should show "Sealed: false"
 ```
+
+**Security Reminder:** Store all management tokens and unseal keys in a secure secret management system (e.g., 1Password, LastPass, HashiCorp Vault in another cluster).
 
 ### Cluster Scaling
 
@@ -798,11 +1002,54 @@ ls -la /etc/consul.d/tls/
 ls -la /etc/nomad.d/tls/
 ls -la /etc/vault.d/tls/
 
-# Check certificate validity
-openssl x509 -in /etc/consul.d/tls/cert.pem -text -noout
+# Check certificate validity and SANs
+openssl x509 -in /etc/consul.d/tls/cert.pem -text -noout | grep -A 10 "Subject Alternative Name"
+
+# Verify CA certificate has CA:TRUE
+openssl x509 -in /etc/consul.d/tls/ca.pem -text -noout | grep -A 5 "Basic Constraints"
 ```
 
-**2. ACL Token Issues**
+**Common certificate issues:**
+- Missing IP addresses in SANs (certificates need both DNS names AND IP addresses including 127.0.0.1)
+- CA certificate missing `CA:TRUE` constraint
+- Certificate bind address mismatch (services must be checked on their actual bind IP, not 127.0.0.1)
+
+**2. Consul Gossip Encryption Errors**
+
+```bash
+# Error: "No installed keys could decrypt the message"
+# This means nodes have different encryption keys
+
+# Solution: The playbook now automatically detects this!
+# When you change consul_encrypt, it will automatically:
+# - Stop Consul service
+# - Clear /opt/consul/* data directory
+# - Restart with new key
+
+# Manual fix if needed:
+sudo systemctl stop consul
+sudo rm -rf /opt/consul/*
+sudo systemctl start consul
+```
+
+**3. Nomad Cluster Not Forming**
+
+```bash
+# Check if Nomad servers can see each other
+nomad server members
+
+# Check raft configuration
+curl -s https://localhost:4646/v1/status/peers | jq
+
+# If Consul data was cleared, Nomad may need reset:
+sudo systemctl stop nomad
+sudo rm -rf /opt/nomad/*
+sudo systemctl start nomad
+```
+
+**Note:** The playbook now includes cascading cleanup - when Consul data changes, Nomad automatically resets to prevent orphaned raft state.
+
+**4. ACL Token Issues**
 
 ```bash
 # Test Consul token
@@ -810,9 +1057,13 @@ consul members -token="your-token"
 
 # Test Nomad token
 nomad node status -token="your-token"
+
+# Vault permission denied on Consul KV
+# Error: "Permission denied: token lacks permission 'key:read' on vault/*"
+# Solution: Create proper Vault ACL policy (see Vault Configuration - ACL Requirements)
 ```
 
-**3. Firewall Blocking**
+**5. Firewall Blocking**
 
 ```bash
 # Check firewall status
@@ -877,7 +1128,26 @@ roles/
 - [Load Balancer Configuration](docs/load_balancers.md) - Detailed LB setup guide
 - [Variable Reference](docs/variables.md) - Complete variable documentation
 - [Job Examples](jobs/README.md) - Nomad job examples and catalog
-- [Code Review Fixes](CODE_REVIEW_FIXES.md) - Recent improvements and fixes
+
+## 🔄 Recent Improvements
+
+### Automatic Cleanup Features (December 2025)
+
+- **Gossip Encryption Key Change Detection**: Automatically detects when `consul_encrypt` changes and clears data directories to prevent "No installed keys could decrypt" errors
+- **Cascading Cleanup**: Nomad automatically detects Consul data changes and clears its own data to prevent orphaned raft state
+- **Health Check Fixes**: All services now check on their actual bind addresses (`{{ ansible_host }}`) instead of hardcoded `127.0.0.1`
+
+### Certificate and PKI Improvements
+
+- **Comprehensive SANs**: Certificates now include DNS names + `IP:127.0.0.1` + `IP:{{ ansible_host }}` for proper mutual TLS
+- **CA Constraints**: CA certificates properly include `Basic Constraints: CA:TRUE` and appropriate key usage extensions
+- **Vault Certificate Paths**: Fixed Vault to use its own certificates (`vault_tls_dir`) instead of Consul's
+
+### Security Enhancements
+
+- **HTTPS-Only Default**: Consul defaults to HTTPS-only (`consul_http_port: -1`) for enhanced security
+- **ACL Documentation**: Comprehensive ACL bootstrap procedures with example policies for all services
+- **Gossip Key Management**: Automatic key loading from file for all hosts with change detection
 
 ## 🤝 Contributing
 

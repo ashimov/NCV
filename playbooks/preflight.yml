@@ -1,0 +1,129 @@
+---
+- name: Preflight | Consul agents
+  hosts: consul_servers:consul_clients
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Check Consul TLS files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ consul_tls_dir }}/ca.pem"
+        - "{{ consul_tls_dir }}/cert.pem"
+        - "{{ consul_tls_dir }}/key.pem"
+      register: consul_tls_stats
+      when: consul_tls_enabled | bool
+
+    - name: Assert Consul TLS files exist
+      ansible.builtin.assert:
+        that: "{{ consul_tls_stats.results | map(attribute='stat.exists') | list | min }}"
+        fail_msg: "Missing Consul TLS files: {{ consul_tls_stats.results | selectattr('stat.exists', 'equalto', False) | map(attribute='item') | list }}"
+      when: consul_tls_enabled | bool
+
+    - name: Check Consul binary version
+      ansible.builtin.command: consul version
+      register: consul_version_cmd
+      changed_when: false
+      failed_when: consul_version is defined and (consul_version_cmd.rc != 0 or consul_version not in consul_version_cmd.stdout)
+
+    - name: Check Consul API is reachable
+      ansible.builtin.uri:
+        url: "{{ (consul_tls_enabled | bool) | ternary('https', 'http') }}://127.0.0.1:{{ (consul_tls_enabled | bool) | ternary(consul_https_port, consul_http_port) }}/v1/status/leader"
+        method: GET
+        validate_certs: "{{ consul_tls_enabled | bool }}"
+        ca_path: "{{ consul_tls_enabled | bool | ternary(consul_tls_dir + '/ca.pem', omit) }}"
+        client_cert: "{{ consul_tls_enabled | bool | ternary(consul_tls_dir + '/cert.pem', omit) }}"
+        client_key: "{{ consul_tls_enabled | bool | ternary(consul_tls_dir + '/key.pem', omit) }}"
+        status_code:
+          - 200  # healthy
+          - 403  # ACL-protected but reachable
+          - 404  # endpoint may differ on clients
+          - 503  # starting up/leader not elected yet
+      register: consul_health
+      changed_when: false
+
+- name: Preflight | Nomad servers
+  hosts: nomad_servers
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Check Nomad TLS files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ nomad_tls_dir }}/ca.pem"
+        - "{{ nomad_tls_dir }}/cert.pem"
+        - "{{ nomad_tls_dir }}/key.pem"
+      register: nomad_tls_stats
+      when: nomad_tls_enabled | bool
+
+    - name: Assert Nomad TLS files exist
+      ansible.builtin.assert:
+        that: "{{ nomad_tls_stats.results | map(attribute='stat.exists') | list | min }}"
+        fail_msg: "Missing Nomad TLS files: {{ nomad_tls_stats.results | selectattr('stat.exists', 'equalto', False) | map(attribute='item') | list }}"
+      when: nomad_tls_enabled | bool
+
+    - name: Check Nomad binary version
+      ansible.builtin.command: nomad version
+      register: nomad_version_cmd
+      changed_when: false
+      failed_when: nomad_version is defined and (nomad_version_cmd.rc != 0 or nomad_version not in nomad_version_cmd.stdout)
+
+    - name: Check Nomad API is reachable
+      ansible.builtin.uri:
+        url: "{{ (nomad_tls_enabled | bool) | ternary('https', 'http') }}://127.0.0.1:4646/v1/status/leader"
+        method: GET
+        validate_certs: "{{ nomad_tls_enabled | bool }}"
+        ca_path: "{{ nomad_tls_enabled | bool | ternary(nomad_tls_dir + '/ca.pem', omit) }}"
+        client_cert: "{{ nomad_tls_enabled | bool | ternary(nomad_tls_dir + '/cert.pem', omit) }}"
+        client_key: "{{ nomad_tls_enabled | bool | ternary(nomad_tls_dir + '/key.pem', omit) }}"
+        status_code:
+          - 200
+          - 403  # ACL protected
+          - 503  # leader not elected yet
+      register: nomad_health
+      changed_when: false
+
+- name: Preflight | Vault servers
+  hosts: vault_servers
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Check Vault TLS files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ vault_tls_dir }}/ca.pem"
+        - "{{ vault_tls_dir }}/cert.pem"
+        - "{{ vault_tls_dir }}/key.pem"
+      register: vault_tls_stats
+      when: vault_tls_enabled | bool
+
+    - name: Assert Vault TLS files exist
+      ansible.builtin.assert:
+        that: "{{ vault_tls_stats.results | map(attribute='stat.exists') | list | min }}"
+        fail_msg: "Missing Vault TLS files: {{ vault_tls_stats.results | selectattr('stat.exists', 'equalto', False) | map(attribute='item') | list }}"
+      when: vault_tls_enabled | bool
+
+    - name: Check Vault binary version
+      ansible.builtin.command: vault version
+      register: vault_version_cmd
+      changed_when: false
+      failed_when: vault_version is defined and (vault_version_cmd.rc != 0 or vault_version not in vault_version_cmd.stdout)
+
+    - name: Check Vault health endpoint
+      ansible.builtin.uri:
+        url: "{{ vault_api_addr }}/v1/sys/health"
+        method: GET
+        validate_certs: "{{ vault_tls_enabled | bool }}"
+        ca_path: "{{ vault_tls_enabled | bool | ternary(vault_tls_dir + '/ca.pem', omit) }}"
+        status_code:
+          - 200  # initialized, unsealed, active
+          - 429  # unsealed, standby
+          - 472  # data recovery mode
+          - 473  # not initialized
+          - 501  # not initialized (older)
+          - 503  # sealed or standby without leader
+      register: vault_health
+      changed_when: false
+*** End Patch

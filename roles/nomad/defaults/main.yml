@@ -1,5 +1,4 @@
----
-nomad_version: "1.7.0"
+nomad_version: "1.11.1"
 nomad_package: >-
   {{
     'nomad'
@@ -46,6 +45,7 @@ nomad_enable_raw_exec: false
 nomad_acl_enabled: false
 
 nomad_tls_enabled: true
+nomad_tls_verify_server_hostname: true
 nomad_tls_source: pki
 nomad_tls_ca_src: "{{ pki_root }}/ca/ca.pem"
 nomad_tls_cert_src: "{{ pki_root }}/hosts/{{ inventory_hostname }}/cert.pem"

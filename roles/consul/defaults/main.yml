@@ -1,5 +1,4 @@
----
-consul_version: "1.17.0"
+consul_version: "1.22.2"
 consul_package: >-
   {{
     'consul'

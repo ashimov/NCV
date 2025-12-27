@@ -105,7 +105,7 @@ Each service (Consul, Nomad, Vault) has similar TLS variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `consul_version` | `1.17.0` | Consul version to install |
+| `consul_version` | `1.22.2` | Consul version to install |
 | `consul_datacenter` | `dc1` | Datacenter identifier |
 | `consul_server` | `false` | Run as server (set in group_vars) |
 | `consul_bootstrap_expect` | `1` | Expected number of servers |
@@ -124,7 +124,7 @@ Each service (Consul, Nomad, Vault) has similar TLS variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `nomad_version` | `1.7.0` | Nomad version to install |
+| `nomad_version` | `1.11.1` | Nomad version to install |
 | `nomad_region` | `global` | Region identifier |
 | `nomad_datacenter` | `dc1` | Datacenter identifier |
 | `nomad_server_enabled` | `false` | Enable server mode |
@@ -142,10 +142,11 @@ Each service (Consul, Nomad, Vault) has similar TLS variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `vault_version` | `1.15.0` | Vault version to install |
+| `vault_version` | `1.21.1` | Vault version to install |
 | `vault_storage_backend` | `consul` | Storage: `consul` or `raft` |
 | `vault_consul_address` | `127.0.0.1:8500` | Consul address |
-| `vault_consul_token` | `""` | Consul ACL token |
+| `vault_consul_token` | `""` | Consul ACL token (read from `vault_consul_token_vaulted` when set) |
+| `vault_consul_token_vaulted` | `""` | Consul ACL token (store with Ansible Vault) |
 | `vault_seal_type` | `none` | Seal: `none`, `awskms`, `gcpckms`, `transit` |
 | `vault_seal_config` | `{}` | Seal-specific configuration |
 | `vault_ui` | `true` | Enable web UI |

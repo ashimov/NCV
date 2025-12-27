@@ -1,4 +1,40 @@
 ---
+- name: Check if Consul encrypt key changed
+  ansible.builtin.set_fact:
+    nomad_consul_encrypt_changed: "{{ hostvars[inventory_hostname].get('consul_encrypt_changed', false) }}"
+  when: nomad_consul_enabled | default(false)
+
+- name: Stop Nomad before clearing data (Consul encrypt key changed)
+  ansible.builtin.systemd:
+    name: nomad
+    state: stopped
+  become: true
+  failed_when: false
+  when:
+    - nomad_consul_encrypt_changed | default(false)
+    - nomad_server | default(false)
+
+- name: Clear Nomad data directory (Consul encrypt key changed)
+  ansible.builtin.file:
+    path: "{{ nomad_data_dir }}"
+    state: absent
+  become: true
+  when:
+    - nomad_consul_encrypt_changed | default(false)
+    - nomad_server | default(false)
+
+- name: Recreate Nomad data directory
+  ansible.builtin.file:
+    path: "{{ nomad_data_dir }}"
+    state: directory
+    owner: "{{ nomad_user }}"
+    group: "{{ nomad_group }}"
+    mode: "0750"
+  become: true
+  when:
+    - nomad_consul_encrypt_changed | default(false)
+    - nomad_server | default(false)
+
 - name: Ensure nomad group
   ansible.builtin.group:
     name: "{{ nomad_group }}"
@@ -144,14 +180,20 @@
       become: true
 
     - name: Wait for Nomad to be ready
-      ansible.builtin.uri:
-        url: "{{ 'https' if nomad_tls_enabled else 'http' }}://127.0.0.1:4646/v1/agent/self"
-        validate_certs: false
-        status_code: 200
+      ansible.builtin.command:
+        cmd: >
+          curl -s -o /dev/null -w "%{http_code}"
+          --cacert {{ nomad_tls_dir }}/ca.pem
+          --cert {{ nomad_tls_dir }}/cert.pem
+          --key {{ nomad_tls_dir }}/key.pem
+          https://{{ ansible_host }}:4646/v1/agent/self
       register: nomad_ready
-      until: nomad_ready.status == 200
+      until: nomad_ready.stdout == "200"
       retries: 30
       delay: 2
+      changed_when: false
+      become: true
+      when: nomad_tls_enabled
 
   rescue:
     - name: Restore previous Nomad configuration
