@@ -1,0 +1,32 @@
+---
+dependency:
+  name: galaxy
+  options:
+    requirements-file: collections/requirements.yml
+
+driver:
+  name: docker
+
+platforms:
+  - name: ubuntu2204
+    image: geerlingguy/docker-ubuntu2204-ansible:latest
+    privileged: true
+    command: /lib/systemd/systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    pre_build_image: true
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      callbacks_enabled: ansible.posix.profile_tasks
+  playbooks:
+    converge: converge.yml
+  inventory:
+    group_vars:
+      all:
+        ansible_user: root
+
+verifier:
+  name: ansible

@@ -108,35 +108,77 @@
   become: true
   no_log: true
 
-- name: Render Nomad configuration
-  ansible.builtin.template:
-    src: nomad.hcl.j2
-    dest: "{{ nomad_config_file }}"
-    owner: "{{ nomad_user }}"
-    group: "{{ nomad_group }}"
-    mode: "0640"
-  notify: Restart nomad
-  become: true
-  no_log: true
+- name: Configure and start Nomad service
+  block:
+    - name: Backup existing Nomad configuration
+      ansible.builtin.copy:
+        src: "{{ nomad_config_file }}"
+        dest: "{{ nomad_config_file }}.backup"
+        remote_src: true
+        mode: preserve
+      when: nomad_config_file is file
+      failed_when: false
+      become: true
 
-- name: Validate Nomad configuration
-  ansible.builtin.command: nomad config validate {{ nomad_config_file }}
-  changed_when: false
-  become: true
+    - name: Render Nomad configuration
+      ansible.builtin.template:
+        src: nomad.hcl.j2
+        dest: "{{ nomad_config_file }}"
+        owner: "{{ nomad_user }}"
+        group: "{{ nomad_group }}"
+        mode: "0640"
+      notify: Restart nomad
+      become: true
+      no_log: true
 
-- name: Enable and start Nomad
-  ansible.builtin.systemd:
-    name: nomad
-    enabled: true
-    state: started
-  become: true
+    - name: Validate Nomad configuration
+      ansible.builtin.command: nomad config validate {{ nomad_config_file }}
+      changed_when: false
+      become: true
 
-- name: Wait for Nomad to be ready
-  ansible.builtin.uri:
-    url: "{{ 'https' if nomad_tls_enabled else 'http' }}://127.0.0.1:4646/v1/agent/self"
-    validate_certs: false
-    status_code: 200
-  register: nomad_ready
-  until: nomad_ready.status == 200
-  retries: 30
-  delay: 2
+    - name: Enable and start Nomad
+      ansible.builtin.systemd:
+        name: nomad
+        enabled: true
+        state: started
+      become: true
+
+    - name: Wait for Nomad to be ready
+      ansible.builtin.uri:
+        url: "{{ 'https' if nomad_tls_enabled else 'http' }}://127.0.0.1:4646/v1/agent/self"
+        validate_certs: false
+        status_code: 200
+      register: nomad_ready
+      until: nomad_ready.status == 200
+      retries: 30
+      delay: 2
+
+  rescue:
+    - name: Restore previous Nomad configuration
+      ansible.builtin.copy:
+        src: "{{ nomad_config_file }}.backup"
+        dest: "{{ nomad_config_file }}"
+        remote_src: true
+        mode: preserve
+      when: nomad_config_file is file
+      failed_when: false
+      become: true
+
+    - name: Restart Nomad after restoration
+      ansible.builtin.systemd:
+        name: nomad
+        state: restarted
+      become: true
+      failed_when: false
+
+    - name: Fail with descriptive message
+      ansible.builtin.fail:
+        msg: "Nomad configuration or startup failed. Previous configuration restored."
+
+  always:
+    - name: Remove backup file
+      ansible.builtin.file:
+        path: "{{ nomad_config_file }}.backup"
+        state: absent
+      become: true
+      failed_when: false

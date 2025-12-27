@@ -87,46 +87,88 @@
   become: true
   no_log: true
 
-- name: Validate Vault configuration
-  ansible.builtin.command: vault server -config={{ vault_config_file }} -test
-  changed_when: false
-  become: true
-  failed_when: false
+- name: Configure and start Vault service
+  block:
+    - name: Backup existing Vault configuration
+      ansible.builtin.copy:
+        src: "{{ vault_config_file }}"
+        dest: "{{ vault_config_file }}.backup"
+        remote_src: true
+        mode: preserve
+      when: vault_config_file is file
+      failed_when: false
+      become: true
 
-- name: Ensure systemd override directory
-  ansible.builtin.file:
-    path: /etc/systemd/system/vault.service.d
-    state: directory
-    mode: "0755"
-  become: true
+    - name: Validate Vault configuration
+      ansible.builtin.command: vault server -config={{ vault_config_file }} -test
+      changed_when: false
+      become: true
+      failed_when: false
 
-- name: Configure systemd override for Vault
-  ansible.builtin.copy:
-    dest: /etc/systemd/system/vault.service.d/override.conf
-    content: |
-      [Service]
-      LimitMEMLOCK=infinity
-      Environment="VAULT_API_ADDR={{ vault_api_addr }}"
-      Environment="VAULT_ADDR={{ vault_api_addr }}"
-    mode: "0644"
-  notify:
-    - Reload systemd
-    - Restart vault
-  become: true
+    - name: Ensure systemd override directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/vault.service.d
+        state: directory
+        mode: "0755"
+      become: true
 
-- name: Enable and start Vault
-  ansible.builtin.systemd:
-    name: vault
-    enabled: true
-    state: started
-  become: true
+    - name: Configure systemd override for Vault
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/vault.service.d/override.conf
+        content: |
+          [Service]
+          LimitMEMLOCK=infinity
+          Environment="VAULT_API_ADDR={{ vault_api_addr }}"
+          Environment="VAULT_ADDR={{ vault_api_addr }}"
+        mode: "0644"
+      notify:
+        - Reload systemd
+        - Restart vault
+      become: true
 
-- name: Wait for Vault to be ready
-  ansible.builtin.uri:
-    url: "{{ vault_api_addr }}/v1/sys/health"
-    validate_certs: false
-    status_code: [200, 429, 501, 503]
-  register: vault_ready
-  until: vault_ready.status in [200, 429, 501, 503]
-  retries: 30
-  delay: 2
+    - name: Enable and start Vault
+      ansible.builtin.systemd:
+        name: vault
+        enabled: true
+        state: started
+      become: true
+
+    - name: Wait for Vault to be ready
+      ansible.builtin.uri:
+        url: "{{ vault_api_addr }}/v1/sys/health"
+        validate_certs: false
+        status_code: [200, 429, 501, 503]
+      register: vault_ready
+      until: vault_ready.status in [200, 429, 501, 503]
+      retries: 30
+      delay: 2
+
+  rescue:
+    - name: Restore previous Vault configuration
+      ansible.builtin.copy:
+        src: "{{ vault_config_file }}.backup"
+        dest: "{{ vault_config_file }}"
+        remote_src: true
+        mode: preserve
+      when: vault_config_file is file
+      failed_when: false
+      become: true
+
+    - name: Restart Vault after restoration
+      ansible.builtin.systemd:
+        name: vault
+        state: restarted
+      become: true
+      failed_when: false
+
+    - name: Fail with descriptive message
+      ansible.builtin.fail:
+        msg: "Vault configuration or startup failed. Previous configuration restored."
+
+  always:
+    - name: Remove backup file
+      ansible.builtin.file:
+        path: "{{ vault_config_file }}.backup"
+        state: absent
+      become: true
+      failed_when: false

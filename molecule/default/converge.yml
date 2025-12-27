@@ -1,0 +1,21 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Include common role
+      ansible.builtin.include_role:
+        name: common
+
+    - name: Verify HashiCorp repo is configured
+      ansible.builtin.command: apt-cache policy consul
+      register: consul_repo_check
+      changed_when: false
+      when: ansible_facts["os_family"] == "Debian"
+
+    - name: Assert Consul package is available
+      ansible.builtin.assert:
+        that:
+          - consul_repo_check.rc == 0
+        fail_msg: "Consul package not available from repository"
+      when: ansible_facts["os_family"] == "Debian"

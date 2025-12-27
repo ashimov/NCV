@@ -1,0 +1,17 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check HashiCorp GPG key exists
+      ansible.builtin.stat:
+        path: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      register: gpg_key
+      when: ansible_facts["os_family"] == "Debian"
+
+    - name: Assert GPG key is present
+      ansible.builtin.assert:
+        that:
+          - gpg_key.stat.exists
+        fail_msg: "HashiCorp GPG key not found"
+      when: ansible_facts["os_family"] == "Debian"

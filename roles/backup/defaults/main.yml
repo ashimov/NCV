@@ -1,0 +1,21 @@
+---
+backup_enabled: false
+backup_dir: "{{ playbook_dir }}/backups"
+backup_timestamp_format: "%Y%m%d_%H%M%S"
+
+# Consul backup
+backup_consul_enabled: true
+backup_consul_snapshot: true
+backup_consul_acl_tokens: false
+
+# Nomad backup
+backup_nomad_enabled: true
+backup_nomad_snapshot: true
+
+# Vault backup (requires unsealed Vault)
+backup_vault_enabled: false
+backup_vault_snapshot: false
+
+# Retention
+backup_keep_days: 7
+backup_compression: true

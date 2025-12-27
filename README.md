@@ -9,6 +9,7 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
 ## 🎯 Features
 
 ### Security First
+
 - ✅ **TLS enabled by default** for all services (Consul, Nomad, Vault)
 - ✅ **ACLs enabled** by default with token management
 - ✅ **Automated PKI** with local CA generation or external certificate integration
@@ -16,6 +17,7 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
 - ✅ **Firewall integration** (ufw/firewalld) with sensible defaults including SSH protection
 
 ### Production Ready
+
 - ✅ **Health checks** with automatic retry and timeout for service readiness
 - ✅ **Configuration validation** before deployment (consul validate, nomad config validate)
 - ✅ **Version pinning** for reproducible deployments
@@ -24,6 +26,7 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
 - ✅ **High availability** - multi-node cluster support out of the box
 
 ### Developer Friendly
+
 - ✅ **Clean role structure** following Ansible best practices
 - ✅ **Comprehensive defaults** - works out of the box
 - ✅ **Extensive documentation** with examples
@@ -63,7 +66,7 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
 ## 🖥️ Supported Operating Systems
 
 | OS | Versions | Status |
-|---|---|---|
+| --- | --- | --- |
 | Ubuntu | 22.04 (Jammy), 24.04 (Noble) | ✅ Fully Supported |
 | Debian | 11 (Bullseye), 12 (Bookworm) | ✅ Fully Supported |
 | Oracle Linux | 8, 9 | ✅ Fully Supported |
@@ -74,6 +77,7 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
 ## 📦 Requirements
 
 ### Control Node
+
 - **Ansible**: 2.14 or higher
 - **Python**: 3.8 or higher
 - **Collections**:
@@ -82,6 +86,7 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
   - `ansible.posix` (firewalld support)
 
 ### Managed Nodes
+
 - SSH access with sudo privileges
 - Python 3.x installed
 - Minimum 2GB RAM per node
@@ -244,7 +249,7 @@ vault status
 ### Roles Description
 
 | Role | Purpose | Key Features |
-|---|---|---|
+| --- | --- | --- |
 | **common** | Base system setup | HashiCorp repos, base packages |
 | **pki** | Certificate management | Local CA or external certs |
 | **consul** | Service mesh & KV store | Server/client modes, ACLs, TLS |
@@ -302,6 +307,7 @@ vault_tls_key_src: /path/to/{{ inventory_hostname }}/key.pem
 ```
 
 **Security Features:**
+
 - ✅ Pre-flight TLS file existence verification
 - ✅ Automatic certificate distribution with correct permissions
 - ✅ All private keys are handled with `no_log: true`
@@ -508,6 +514,7 @@ firewall_allow_cidrs:
 ```
 
 **Default Allowed Ports:**
+
 - `22/tcp` - SSH (added for safety)
 - `8300/tcp` - Consul server RPC
 - `8301/tcp,udp` - Consul serf LAN
@@ -562,6 +569,7 @@ nomad_retry_join_cloud:
 ```
 
 **Best Practice:** Keep cloud-specific auto-join configuration in inventory-specific files:
+
 - `inventories/aws/group_vars/all.yml`
 - `inventories/gcp/group_vars/all.yml`
 - `inventories/azure/group_vars/all.yml`
