@@ -1,0 +1,3 @@
+---
+nomad_server_enabled: false
+nomad_client_enabled: true

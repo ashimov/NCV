@@ -1,0 +1,26 @@
+---
+provider: "{{ load_balancer_provider }}"
+name: "{{ load_balancer_name }}"
+
+listeners:
+{% for listener in load_balancer_listeners %}
+  - name: "{{ listener.name }}"
+    port: {{ listener.port }}
+    protocol: "{{ listener.protocol }}"
+    target_port: {{ listener.target_port }}
+    target_group: "{{ listener.target_group }}"
+{% endfor %}
+
+targets:
+{% for group_name, target_list in load_balancer_targets.items() %}
+  {{ group_name }}:
+  {% for target in target_list %}
+    - name: "{{ target }}"
+      address: "{{ hostvars.get(target, {}).get('ansible_host', target) }}"
+  {% endfor %}
+{% endfor %}
+
+notes:
+  - "AWS NLB: listeners are TCP pass-through. Terminate TLS on services or use separate ALB for HTTP termination."
+  - "GCP GLB (TCP/SSL): use backend service with health checks per target_group and forwarding rules per port."
+  - "Restrict firewall to LB source ranges where possible."

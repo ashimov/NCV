@@ -1,0 +1,23 @@
+# PKI artifacts
+pki/
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.jks
+
+# Ansible cache/retries
+*.retry
+.ansible/
+
+# Local tooling
+.vscode/
+.idea/
+.env
+
+# Collections install dir
+collections/
+
+#Misc
+.DS_Store

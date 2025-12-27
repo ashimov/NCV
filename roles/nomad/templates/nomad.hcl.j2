@@ -1,0 +1,76 @@
+region = "{{ nomad_region }}"
+datacenter = "{{ nomad_datacenter }}"
+name = "{{ inventory_hostname }}"
+data_dir = "{{ nomad_data_dir }}"
+
+bind_addr = "{{ nomad_bind_addr }}"
+
+advertise {
+  http = "{{ nomad_advertise_addr }}"
+  rpc  = "{{ nomad_advertise_addr }}"
+  serf = "{{ nomad_advertise_addr }}"
+}
+
+{% if nomad_server_enabled %}
+server {
+  enabled = true
+  bootstrap_expect = {{ nomad_bootstrap_expect }}
+}
+{% endif %}
+
+{% if nomad_client_enabled %}
+client {
+  enabled = true
+}
+{% endif %}
+
+{% set nomad_retry_join_effective = nomad_retry_join %}
+{% if nomad_retry_join_cloud_enabled %}
+{% set nomad_retry_join_effective = nomad_retry_join + nomad_retry_join_cloud %}
+{% endif %}
+
+{% if nomad_retry_join_effective | length > 0 %}
+server_join {
+  retry_join = {{ nomad_retry_join_effective | unique | to_json }}
+}
+{% endif %}
+
+{% if nomad_consul_enabled %}
+consul {
+  address = "{{ nomad_consul_address }}"
+{% if nomad_consul_token | length > 0 %}
+  token = "{{ nomad_consul_token }}"
+{% endif %}
+{% if nomad_consul_tls_enabled | default(false) %}
+  ssl = true
+  ca_file = "{{ nomad_consul_tls_dir }}/ca.pem"
+  cert_file = "{{ nomad_consul_tls_dir }}/cert.pem"
+  key_file = "{{ nomad_consul_tls_dir }}/key.pem"
+{% endif %}
+}
+{% endif %}
+
+{% if nomad_acl_enabled %}
+acl {
+  enabled = true
+}
+{% endif %}
+
+{% if nomad_tls_enabled %}
+tls {
+  http = true
+  rpc = true
+  verify_server_hostname = true
+  ca_file = "{{ nomad_tls_dir }}/ca.pem"
+  cert_file = "{{ nomad_tls_dir }}/cert.pem"
+  key_file = "{{ nomad_tls_dir }}/key.pem"
+}
+{% endif %}
+
+{% if nomad_enable_raw_exec %}
+plugin "raw_exec" {
+  config {
+    enabled = true
+  }
+}
+{% endif %}

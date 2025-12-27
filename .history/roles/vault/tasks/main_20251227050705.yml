@@ -1,0 +1,104 @@
+---
+- name: Ensure vault group
+  ansible.builtin.group:
+    name: "{{ vault_group }}"
+    system: true
+  become: true
+
+- name: Ensure vault user
+  ansible.builtin.user:
+    name: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+  become: true
+
+- name: Install Vault package
+  ansible.builtin.package:
+    name: "{{ vault_package }}"
+    state: present
+  become: true
+
+- name: Create Vault directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: "0750"
+  loop:
+    - "{{ vault_config_dir }}"
+    - "{{ vault_data_dir }}"
+    - "{{ vault_tls_dir }}"
+  become: true
+
+- name: Copy Vault TLS CA
+  ansible.builtin.copy:
+    src: "{{ vault_tls_ca_src }}"
+    dest: "{{ vault_tls_dir }}/ca.pem"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: "0644"
+  when: vault_tls_enabled
+  become: true
+
+- name: Copy Vault TLS certificate
+  ansible.builtin.copy:
+    src: "{{ vault_tls_cert_src }}"
+    dest: "{{ vault_tls_dir }}/cert.pem"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: "0644"
+  when: vault_tls_enabled
+  become: true
+
+- name: Copy Vault TLS key
+  ansible.builtin.copy:
+    src: "{{ vault_tls_key_src }}"
+    dest: "{{ vault_tls_dir }}/key.pem"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: "0600"
+  when: vault_tls_enabled
+  become: true
+  no_log: true
+
+- name: Render Vault configuration
+  ansible.builtin.template:
+    src: vault.hcl.j2
+    dest: "{{ vault_config_file }}"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: "0640"
+  notify: Restart vault
+  become: true
+  no_log: true
+
+- name: Ensure systemd override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/vault.service.d
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Configure systemd override for Vault
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/vault.service.d/override.conf
+    content: |
+      [Service]
+      LimitMEMLOCK=infinity
+      Environment="VAULT_API_ADDR={{ vault_api_addr }}"
+      Environment="VAULT_ADDR={{ vault_api_addr }}"
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart vault
+  become: true
+
+- name: Enable and start Vault
+  ansible.builtin.systemd:
+    name: vault
+    enabled: true
+    state: started
+  become: true

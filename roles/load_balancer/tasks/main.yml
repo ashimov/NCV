@@ -1,0 +1,18 @@
+---
+- name: Ensure load balancer output directory
+  ansible.builtin.file:
+    path: "{{ load_balancer_output_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  run_once: true
+  when: load_balancer_enabled
+
+- name: Render load balancer plan
+  ansible.builtin.template:
+    src: lb-plan.yml.j2
+    dest: "{{ load_balancer_output_dir }}/{{ load_balancer_provider }}-{{ load_balancer_name }}.yml"
+    mode: "0644"
+  delegate_to: localhost
+  run_once: true
+  when: load_balancer_enabled

@@ -1,0 +1,7 @@
+---
+nomad_jobs_enabled: false
+nomad_jobs_dir: "{{ playbook_dir }}/jobs"
+nomad_jobs_tmp_dir: /var/tmp/nomad-jobs
+nomad_jobs_nomad_addr: "https://127.0.0.1:4646"
+nomad_jobs_nomad_token: ""
+nomad_jobs_delegate: "{{ groups['nomad_servers'][0] | default(inventory_hostname) }}"

@@ -1,0 +1,48 @@
+ui = {{ 'true' if vault_ui else 'false' }}
+api_addr = "{{ vault_api_addr }}"
+cluster_addr = "{{ vault_cluster_addr }}"
+disable_mlock = {{ 'true' if vault_disable_mlock else 'false' }}
+
+listener "tcp" {
+  address = "{{ vault_listener_address }}"
+  cluster_address = "{{ vault_cluster_listen_address }}"
+{% if vault_tls_enabled %}
+  tls_cert_file = "{{ vault_tls_dir }}/cert.pem"
+  tls_key_file = "{{ vault_tls_dir }}/key.pem"
+{% if vault_tls_require_client_cert %}
+  tls_client_ca_file = "{{ vault_tls_dir }}/ca.pem"
+  tls_require_and_verify_client_cert = true
+{% endif %}
+{% else %}
+  tls_disable = 1
+{% endif %}
+}
+
+{% if vault_storage_backend == 'consul' %}
+storage "consul" {
+  address = "{{ vault_consul_address }}"
+  scheme = "{{ vault_consul_scheme }}"
+  path = "vault/"
+{% if vault_consul_token | length > 0 %}
+  token = "{{ vault_consul_token }}"
+{% endif %}
+{% if vault_consul_scheme == 'https' %}
+  tls_ca_file = "{{ vault_consul_tls_ca_file }}"
+  tls_cert_file = "{{ vault_consul_tls_cert_file }}"
+  tls_key_file = "{{ vault_consul_tls_key_file }}"
+{% endif %}
+}
+{% elif vault_storage_backend == 'raft' %}
+storage "raft" {
+  path = "{{ vault_data_dir }}"
+  node_id = "{{ inventory_hostname }}"
+}
+{% endif %}
+
+{% if vault_seal_type != 'none' %}
+seal "{{ vault_seal_type }}" {
+{% for key, value in vault_seal_config.items() %}
+  {{ key }} = {{ value | to_json }}
+{% endfor %}
+}
+{% endif %}

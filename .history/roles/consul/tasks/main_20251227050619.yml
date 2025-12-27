@@ -1,0 +1,83 @@
+---
+- name: Ensure consul group
+  ansible.builtin.group:
+    name: "{{ consul_group }}"
+    system: true
+  become: true
+
+- name: Ensure consul user
+  ansible.builtin.user:
+    name: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+  become: true
+
+- name: Install Consul package
+  ansible.builtin.package:
+    name: "{{ consul_package }}"
+    state: present
+  become: true
+
+- name: Create Consul directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    mode: "0750"
+  loop:
+    - "{{ consul_data_dir }}"
+    - "{{ consul_config_dir }}"
+    - "{{ consul_tls_dir }}"
+  become: true
+
+- name: Copy Consul TLS CA
+  ansible.builtin.copy:
+    src: "{{ consul_tls_ca_src }}"
+    dest: "{{ consul_tls_dir }}/ca.pem"
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    mode: "0644"
+  when: consul_tls_enabled
+  become: true
+
+- name: Copy Consul TLS certificate
+  ansible.builtin.copy:
+    src: "{{ consul_tls_cert_src }}"
+    dest: "{{ consul_tls_dir }}/cert.pem"
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    mode: "0644"
+  when: consul_tls_enabled
+  become: true
+
+- name: Copy Consul TLS key
+  ansible.builtin.copy:
+    src: "{{ consul_tls_key_src }}"
+    dest: "{{ consul_tls_dir }}/key.pem"
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    mode: "0600"
+  when: consul_tls_enabled
+  become: true
+  no_log: true
+
+- name: Render Consul configuration
+  ansible.builtin.template:
+    src: consul.hcl.j2
+    dest: "{{ consul_config_file }}"
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    mode: "0640"
+  notify: Restart consul
+  become: true
+  no_log: true
+
+- name: Enable and start Consul
+  ansible.builtin.systemd:
+    name: consul
+    enabled: true
+    state: started
+  become: true

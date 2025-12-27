@@ -1,0 +1,17 @@
+---
+common_packages_debian:
+  - curl
+  - unzip
+  - jq
+  - gnupg
+  - ca-certificates
+  - apt-transport-https
+  - openssl
+
+common_packages_redhat:
+  - curl
+  - unzip
+  - jq
+  - gnupg2
+  - ca-certificates
+  - openssl

@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  author: NCV Project
+  description: Deploy and configure Vault with TLS, Consul backend, and auto-unseal support
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+
+dependencies: []

@@ -1,0 +1,9 @@
+---
+# Cloud auto-join (AWS)
+consul_retry_join_cloud_enabled: true
+consul_retry_join_cloud:
+  - "provider=aws tag_key=consul tag_value=server"
+
+nomad_retry_join_cloud_enabled: true
+nomad_retry_join_cloud:
+  - "provider=aws tag_key=nomad tag_value=server"

@@ -1,0 +1,44 @@
+---
+- name: Install base packages (Debian)
+  ansible.builtin.apt:
+    name: "{{ common_packages_debian }}"
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+  become: true
+
+- name: Install base packages (RedHat)
+  ansible.builtin.package:
+    name: "{{ common_packages_redhat }}"
+    state: present
+  when: ansible_os_family == "RedHat"
+  become: true
+
+- name: Add HashiCorp GPG key (Debian)
+  ansible.builtin.get_url:
+    url: https://apt.releases.hashicorp.com/gpg
+    dest: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    mode: "0644"
+  when: ansible_os_family == "Debian"
+  become: true
+
+- name: Add HashiCorp repository (Debian)
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg]
+      https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+  become: true
+
+- name: Add HashiCorp repository (RedHat)
+  ansible.builtin.yum_repository:
+    name: hashicorp
+    description: HashiCorp Stable - $basearch
+    baseurl: https://rpm.releases.hashicorp.com/RHEL/$releasever/$basearch/stable
+    gpgcheck: true
+    gpgkey: https://rpm.releases.hashicorp.com/gpg
+    enabled: true
+  when: ansible_os_family == "RedHat"
+  become: true

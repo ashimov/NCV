@@ -1,0 +1,58 @@
+---
+- name: Common baseline
+  hosts: "all:!pki_ca_host"
+  gather_facts: true
+  roles:
+    - role: common
+      tags: [common]
+
+- name: Firewall (optional)
+  hosts: "all:!pki_ca_host"
+  gather_facts: false
+  roles:
+    - role: firewall
+      tags: [firewall]
+
+- name: PKI (optional local CA)
+  hosts: pki_ca_host
+  gather_facts: false
+  connection: local
+  roles:
+    - role: pki
+      tags: [pki]
+
+- name: Consul cluster
+  hosts: "consul_servers:consul_clients"
+  gather_facts: true
+  roles:
+    - role: consul
+      tags: [consul]
+
+- name: Nomad cluster
+  hosts: "nomad_servers:nomad_clients"
+  gather_facts: true
+  roles:
+    - role: nomad
+      tags: [nomad]
+
+- name: Vault cluster
+  hosts: vault_servers
+  gather_facts: true
+  roles:
+    - role: vault
+      tags: [vault]
+
+- name: Nomad jobs (optional)
+  hosts: nomad_servers
+  gather_facts: false
+  roles:
+    - role: nomad_jobs
+      tags: [nomad_jobs]
+
+- name: Load balancer plan (optional)
+  hosts: load_balancer
+  gather_facts: false
+  connection: local
+  roles:
+    - role: load_balancer
+      tags: [load_balancer]
