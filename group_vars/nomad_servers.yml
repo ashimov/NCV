@@ -1,4 +1,4 @@
 ---
 nomad_server_enabled: true
-nomad_client_enabled: false
+nomad_client_enabled: true
 nomad_bootstrap_expect: "{{ groups['nomad_servers'] | length }}"

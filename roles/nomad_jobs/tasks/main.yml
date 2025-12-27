@@ -12,14 +12,25 @@
 
 - name: Build Nomad CLI environment
   ansible.builtin.set_fact:
-    nomad_jobs_env: >-
-      {{
-        {'NOMAD_ADDR': nomad_jobs_nomad_addr}
-        | combine(nomad_jobs_nomad_token | length > 0 | ternary({'NOMAD_TOKEN': nomad_jobs_nomad_token}, {}))
-        | combine((nomad_tls_enabled | default(false)) | ternary({'NOMAD_CACERT': nomad_tls_dir + '/ca.pem'}, {}))
-      }}
+    nomad_jobs_env: "{{ {'NOMAD_ADDR': nomad_jobs_nomad_addr} }}"
   run_once: true
   when: nomad_jobs_enabled
+
+- name: Append Nomad token to environment when provided
+  ansible.builtin.set_fact:
+    nomad_jobs_env: "{{ nomad_jobs_env | combine({'NOMAD_TOKEN': nomad_jobs_nomad_token}) }}"
+  run_once: true
+  when:
+    - nomad_jobs_enabled
+    - nomad_jobs_nomad_token | length > 0
+
+- name: Append Nomad CA cert when TLS is enabled
+  ansible.builtin.set_fact:
+    nomad_jobs_env: "{{ nomad_jobs_env | combine({'NOMAD_CACERT': nomad_tls_dir + '/ca.pem'}) }}"
+  run_once: true
+  when:
+    - nomad_jobs_enabled
+    - nomad_tls_enabled | default(false)
 
 - name: Ensure Nomad jobs temp directory
   ansible.builtin.file:
@@ -50,7 +61,7 @@
   when: nomad_jobs_enabled
   failed_when: false
   changed_when: false
-  no_log: true
+  become: true
 
 - name: Run Nomad jobs
   ansible.builtin.command: "nomad job run {{ nomad_jobs_tmp_dir }}/{{ item.item.path | basename }}"
@@ -59,5 +70,5 @@
   delegate_to: "{{ nomad_jobs_delegate }}"
   run_once: true
   loop: "{{ nomad_jobs_plan.results }}"
-  when: nomad_jobs_enabled and item.rc in [0, 255]
-  no_log: true
+  when: nomad_jobs_enabled and item.rc in [0, 1, 255]
+  become: true

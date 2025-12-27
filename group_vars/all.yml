@@ -56,6 +56,7 @@ nomad_advertise_addr: "{{ node_ip }}"
 nomad_retry_join: "{{ groups['nomad_servers'] | default([]) | map('extract', hostvars, 'node_ip') | list }}"
 nomad_retry_join_cloud_enabled: false
 nomad_retry_join_cloud: []
+nomad_install_docker: true
 nomad_consul_enabled: true
 nomad_consul_address: >-
   127.0.0.1:{{
@@ -69,6 +70,7 @@ nomad_consul_tls_dir: /etc/nomad.d/consul-tls
 nomad_consul_tls_ca_src: "{{ consul_tls_ca_src }}"
 nomad_consul_tls_cert_src: "{{ consul_tls_cert_src }}"
 nomad_consul_tls_key_src: "{{ consul_tls_key_src }}"
+nomad_consul_token: "b0184dff-cfec-bd17-6d5e-ff707940adf4"
 
 # Vault defaults
 vault_config_dir: /etc/vault.d
@@ -123,8 +125,8 @@ firewall_allow_cidrs: []
 load_balancer_enabled: false
 load_balancer_provider: aws
 # Nomad jobs
-nomad_jobs_enabled: false
-nomad_jobs_dir: "{{ playbook_dir }}/jobs"
+nomad_jobs_enabled: true
+nomad_jobs_dir: "{{ playbook_dir }}/jobs/enabled"
 nomad_jobs_tmp_dir: /var/tmp/nomad-jobs
 nomad_jobs_nomad_addr: "https://{{ node_ip }}:4646"
 nomad_jobs_nomad_token: ""

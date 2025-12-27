@@ -56,6 +56,68 @@
     state: present
   become: true
 
+- name: Install Docker dependencies (RHEL-family)
+  when:
+    - nomad_install_docker | default(false)
+    - ansible_facts.os_family == 'RedHat'
+  block:
+    - name: Ensure dnf-plugins-core is present
+      ansible.builtin.package:
+        name: dnf-plugins-core
+        state: present
+      become: true
+
+    - name: Add Docker CE repo
+      ansible.builtin.get_url:
+        url: "{{ nomad_docker_repo_url }}"
+        dest: /etc/yum.repos.d/docker-ce.repo
+        mode: "0644"
+      become: true
+
+    - name: Install Docker packages
+      ansible.builtin.package:
+        name: "{{ nomad_docker_packages }}"
+        state: present
+      become: true
+
+    - name: Enable and start Docker
+      ansible.builtin.systemd:
+        name: "{{ nomad_docker_service }}"
+        enabled: true
+        state: started
+      become: true
+
+- name: Install CNI plugins (RHEL-family)
+  when:
+    - nomad_install_cni | default(true)
+    - ansible_facts.os_family == 'RedHat'
+  block:
+    - name: Install CNI packages
+      ansible.builtin.package:
+        name: "{{ nomad_cni_packages }}"
+        state: present
+      become: true
+
+    - name: Ensure Nomad CNI bin directory exists
+      ansible.builtin.file:
+        path: "{{ nomad_cni_bin_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    - name: Symlink CNI plugins into Nomad path
+      ansible.builtin.shell: |
+        set -euo pipefail
+        for plugin in {{ nomad_cni_src_dir }}/*; do
+          ln -sf "$plugin" "{{ nomad_cni_bin_dir }}/$(basename "$plugin")"
+        done
+      args:
+        executable: /bin/bash
+      become: true
+      changed_when: false
+
 - name: Create Nomad directories
   ansible.builtin.file:
     path: "{{ item }}"

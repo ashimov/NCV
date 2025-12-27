@@ -50,3 +50,18 @@ nomad_tls_source: pki
 nomad_tls_ca_src: "{{ pki_root }}/ca/ca.pem"
 nomad_tls_cert_src: "{{ pki_root }}/hosts/{{ inventory_hostname }}/cert.pem"
 nomad_tls_key_src: "{{ pki_root }}/hosts/{{ inventory_hostname }}/key.pem"
+nomad_install_docker: false
+nomad_docker_repo_url: https://download.docker.com/linux/centos/docker-ce.repo
+nomad_docker_packages:
+  - dnf-plugins-core
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-compose-plugin
+nomad_docker_service: docker
+
+nomad_install_cni: true
+nomad_cni_packages:
+  - containernetworking-plugins
+nomad_cni_src_dir: /usr/libexec/cni
+nomad_cni_bin_dir: /opt/cni/bin
