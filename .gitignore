@@ -1,3 +1,14 @@
+# IDE / Editor
+.history/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
 # PKI artifacts
 pki/
 *.pem
