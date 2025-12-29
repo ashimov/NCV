@@ -1,0 +1,26 @@
+---
+preflight_enabled: true  # SECURITY: Enabled by default to catch configuration issues early
+
+preflight_debian_distributions:
+  - Ubuntu
+preflight_ubuntu_versions:
+  - "22.04"
+  - "24.04"
+preflight_redhat_distributions:
+  - OracleLinux
+  - AlmaLinux
+
+preflight_require_consul: true
+preflight_require_nomad: true
+preflight_require_vault: false
+preflight_require_pki: true
+preflight_check_unique_node_ip: true
+preflight_warn_on_insecure_defaults: true
+# Resource requirements
+preflight_check_resources: true
+preflight_min_ram_mb: 2048  # 2GB minimum
+preflight_min_disk_gb: 20   # 20GB minimum
+preflight_min_cpu_cores: 2  # 2 cores minimum
+
+# Port availability checks
+preflight_check_ports: true

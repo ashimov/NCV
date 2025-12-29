@@ -1,0 +1,294 @@
+---
+- name: Check if Consul encrypt key changed
+  ansible.builtin.set_fact:
+    nomad_consul_encrypt_changed: "{{ hostvars[inventory_hostname].get('consul_encrypt_changed', false) }}"
+  when: nomad_consul_enabled | default(false)
+
+- name: Stop Nomad before clearing data (Consul encrypt key changed)
+  ansible.builtin.systemd:
+    name: nomad
+    state: stopped
+  become: true
+  failed_when: false
+  when:
+    - nomad_consul_encrypt_changed | default(false)
+    - nomad_server | default(false)
+
+- name: Clear Nomad data directory (Consul encrypt key changed)
+  ansible.builtin.file:
+    path: "{{ nomad_data_dir }}"
+    state: absent
+  become: true
+  when:
+    - nomad_consul_encrypt_changed | default(false)
+    - nomad_server | default(false)
+
+- name: Recreate Nomad data directory
+  ansible.builtin.file:
+    path: "{{ nomad_data_dir }}"
+    state: directory
+    owner: "{{ nomad_user }}"
+    group: "{{ nomad_group }}"
+    mode: "0750"
+  become: true
+  when:
+    - nomad_consul_encrypt_changed | default(false)
+    - nomad_server | default(false)
+
+- name: Ensure nomad group
+  ansible.builtin.group:
+    name: "{{ nomad_group }}"
+    system: true
+  become: true
+
+- name: Ensure nomad user
+  ansible.builtin.user:
+    name: "{{ nomad_user }}"
+    group: "{{ nomad_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+  become: true
+
+- name: Install Nomad package
+  ansible.builtin.package:
+    name: "{{ nomad_package }}"
+    state: present
+  become: true
+
+- name: Install Docker dependencies (RHEL-family)
+  when:
+    - nomad_install_docker | default(false)
+    - ansible_facts.os_family == 'RedHat'
+  block:
+    - name: Ensure dnf-plugins-core is present
+      ansible.builtin.package:
+        name: dnf-plugins-core
+        state: present
+      become: true
+
+    - name: Add Docker CE repo
+      ansible.builtin.get_url:
+        url: "{{ nomad_docker_repo_url }}"
+        dest: /etc/yum.repos.d/docker-ce.repo
+        mode: "0644"
+      become: true
+
+    - name: Install Docker packages
+      ansible.builtin.package:
+        name: "{{ nomad_docker_packages }}"
+        state: present
+      become: true
+
+    - name: Enable and start Docker
+      ansible.builtin.systemd:
+        name: "{{ nomad_docker_service }}"
+        enabled: true
+        state: started
+      become: true
+
+- name: Install CNI plugins (RHEL-family)
+  when:
+    - nomad_install_cni | default(true)
+    - ansible_facts.os_family == 'RedHat'
+  block:
+    - name: Install CNI packages
+      ansible.builtin.package:
+        name: "{{ nomad_cni_packages }}"
+        state: present
+      become: true
+
+    - name: Ensure Nomad CNI bin directory exists
+      ansible.builtin.file:
+        path: "{{ nomad_cni_bin_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    - name: Find CNI plugins to symlink
+      ansible.builtin.find:
+        paths: "{{ nomad_cni_src_dir }}"
+        file_type: file
+      register: nomad_cni_plugins
+      become: true
+
+    - name: Symlink CNI plugins into Nomad path
+      ansible.builtin.file:
+        src: "{{ item.path }}"
+        dest: "{{ nomad_cni_bin_dir }}/{{ item.path | basename }}"
+        state: link
+        force: yes
+      loop: "{{ nomad_cni_plugins.files }}"
+      become: true
+      when: nomad_cni_plugins.files | length > 0
+
+- name: Create Nomad directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ nomad_user }}"
+    group: "{{ nomad_group }}"
+    mode: "0750"
+  loop:
+    - "{{ nomad_data_dir }}"
+    - "{{ nomad_config_dir }}"
+    - "{{ nomad_tls_dir }}"
+    - "{{ nomad_consul_tls_dir }}"
+  become: true
+
+- name: Verify Nomad TLS files exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  delegate_to: localhost
+  register: nomad_tls_check
+  failed_when: not nomad_tls_check.stat.exists
+  loop:
+    - "{{ nomad_tls_ca_src }}"
+    - "{{ nomad_tls_cert_src }}"
+    - "{{ nomad_tls_key_src }}"
+  when: nomad_tls_enabled
+
+- name: Copy Nomad TLS CA
+  ansible.builtin.copy:
+    src: "{{ nomad_tls_ca_src }}"
+    dest: "{{ nomad_tls_dir }}/ca.pem"
+    owner: "{{ nomad_user }}"
+    group: "{{ nomad_group }}"
+    mode: "0644"
+  when: nomad_tls_enabled
+  become: true
+
+- name: Copy Nomad TLS certificate
+  ansible.builtin.copy:
+    src: "{{ nomad_tls_cert_src }}"
+    dest: "{{ nomad_tls_dir }}/cert.pem"
+    owner: "{{ nomad_user }}"
+    group: "{{ nomad_group }}"
+    mode: "0644"
+  when: nomad_tls_enabled
+  become: true
+
+- name: Copy Nomad TLS key
+  ansible.builtin.copy:
+    src: "{{ nomad_tls_key_src }}"
+    dest: "{{ nomad_tls_dir }}/key.pem"
+    owner: "{{ nomad_user }}"
+    group: "{{ nomad_group }}"
+    mode: "0600"
+  when: nomad_tls_enabled
+  become: true
+  no_log: true
+
+- name: Copy Consul TLS CA for Nomad
+  ansible.builtin.copy:
+    src: "{{ nomad_consul_tls_ca_src }}"
+    dest: "{{ nomad_consul_tls_dir }}/ca.pem"
+    owner: "{{ nomad_user }}"
+    group: "{{ nomad_group }}"
+    mode: "0644"
+  when: nomad_consul_tls_enabled
+  become: true
+
+- name: Copy Consul TLS certificate for Nomad
+  ansible.builtin.copy:
+    src: "{{ nomad_consul_tls_cert_src }}"
+    dest: "{{ nomad_consul_tls_dir }}/cert.pem"
+    owner: "{{ nomad_user }}"
+    group: "{{ nomad_group }}"
+    mode: "0644"
+  when: nomad_consul_tls_enabled
+  become: true
+
+- name: Copy Consul TLS key for Nomad
+  ansible.builtin.copy:
+    src: "{{ nomad_consul_tls_key_src }}"
+    dest: "{{ nomad_consul_tls_dir }}/key.pem"
+    owner: "{{ nomad_user }}"
+    group: "{{ nomad_group }}"
+    mode: "0600"
+  when: nomad_consul_tls_enabled
+  become: true
+  no_log: true
+
+- name: Configure and start Nomad service
+  block:
+    - name: Backup existing Nomad configuration
+      ansible.builtin.copy:
+        src: "{{ nomad_config_file }}"
+        dest: "{{ nomad_config_file }}.backup"
+        remote_src: true
+        mode: preserve
+      when: nomad_config_file is file
+      failed_when: false
+      become: true
+
+    - name: Render Nomad configuration
+      ansible.builtin.template:
+        src: nomad.hcl.j2
+        dest: "{{ nomad_config_file }}"
+        owner: "{{ nomad_user }}"
+        group: "{{ nomad_group }}"
+        mode: "0640"
+      notify: Restart nomad
+      become: true
+      no_log: true
+
+    - name: Validate Nomad configuration
+      ansible.builtin.command: nomad config validate {{ nomad_config_file }}
+      changed_when: false
+      become: true
+
+    - name: Enable and start Nomad
+      ansible.builtin.systemd:
+        name: nomad
+        enabled: true
+        state: started
+      become: true
+
+    - name: Wait for Nomad to be ready
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}:4646/v1/agent/self"
+        ca_path: "{{ nomad_tls_dir }}/ca.pem"
+        client_cert: "{{ nomad_tls_dir }}/cert.pem"
+        client_key: "{{ nomad_tls_dir }}/key.pem"
+        return_content: yes
+        status_code: 200
+        validate_certs: yes
+      register: nomad_ready
+      until: nomad_ready.status == 200
+      retries: 30
+      delay: 2
+      become: true
+      when: nomad_tls_enabled
+
+  rescue:
+    - name: Restore previous Nomad configuration
+      ansible.builtin.copy:
+        src: "{{ nomad_config_file }}.backup"
+        dest: "{{ nomad_config_file }}"
+        remote_src: true
+        mode: preserve
+      when: nomad_config_file is file
+      failed_when: false
+      become: true
+
+    - name: Restart Nomad after restoration
+      ansible.builtin.systemd:
+        name: nomad
+        state: restarted
+      become: true
+      failed_when: false
+
+    - name: Fail with descriptive message
+      ansible.builtin.fail:
+        msg: "Nomad configuration or startup failed. Previous configuration restored."
+
+  always:
+    - name: Remove backup file
+      ansible.builtin.file:
+        path: "{{ nomad_config_file }}.backup"
+        state: absent
+      become: true
+      failed_when: false
