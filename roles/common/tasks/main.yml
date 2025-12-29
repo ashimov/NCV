@@ -38,10 +38,11 @@
   become: true
 
 - name: Add HashiCorp GPG key (Debian)
-  ansible.builtin.get_url:
-    url: https://apt.releases.hashicorp.com/gpg
-    dest: /usr/share/keyrings/hashicorp-archive-keyring.gpg
-    mode: "0644"
+  ansible.builtin.shell: |
+    wget -qO- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    chmod 644 /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
   when: ansible_facts["os_family"] == "Debian"
   become: true
 

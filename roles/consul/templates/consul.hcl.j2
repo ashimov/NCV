@@ -16,8 +16,12 @@ bootstrap_expect = {{ consul_bootstrap_expect }}
 {% endif %}
 
 {% set consul_retry_join_effective = consul_retry_join %}
+{% if consul_retry_join_effective | length == 0 and groups.get('consul_servers', []) | length > 0 %}
+{# Auto-generate retry_join from consul_servers group if not explicitly set #}
+{% set consul_retry_join_effective = groups['consul_servers'] | map('extract', hostvars, 'node_ip') | select('defined') | list %}
+{% endif %}
 {% if consul_retry_join_cloud_enabled %}
-{% set consul_retry_join_effective = consul_retry_join + consul_retry_join_cloud %}
+{% set consul_retry_join_effective = consul_retry_join_effective + consul_retry_join_cloud %}
 {% endif %}
 retry_join = {{ consul_retry_join_effective | unique | to_json }}
 

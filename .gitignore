@@ -32,3 +32,9 @@ vault_pass.txt
 *.secret
 consul_encrypt.key
 
+# Logs
+*.log
+
+# Custom inventories (contain sensitive IPs/passwords)
+inventories/NomadCluster/
+

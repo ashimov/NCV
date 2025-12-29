@@ -46,3 +46,21 @@ seal "{{ vault_seal_type }}" {
 {% endfor %}
 }
 {% endif %}
+
+# Service registration in Consul for service discovery
+{% if vault_storage_backend == 'consul' or vault_consul_service_registration | default(true) %}
+service_registration "consul" {
+  address = "{{ vault_consul_address }}"
+  scheme = "{{ vault_consul_scheme }}"
+  service = "vault"
+  service_tags = "traefik.enable=true"
+{% if vault_consul_token | length > 0 %}
+  token = "{{ vault_consul_token }}"
+{% endif %}
+{% if vault_consul_scheme == 'https' %}
+  tls_ca_file = "{{ vault_consul_tls_ca_file }}"
+  tls_cert_file = "{{ vault_consul_tls_cert_file }}"
+  tls_key_file = "{{ vault_consul_tls_key_file }}"
+{% endif %}
+}
+{% endif %}

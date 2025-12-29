@@ -8,6 +8,27 @@
     consul_bootstrap_expect: "{{ groups['consul_servers'] | length }}"
   when: consul_server | bool
 
+- name: Ensure consul group
+  ansible.builtin.group:
+    name: "{{ consul_group }}"
+    system: true
+  become: true
+
+- name: Ensure consul user
+  ansible.builtin.user:
+    name: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+  become: true
+
+- name: Install Consul package
+  ansible.builtin.package:
+    name: "{{ consul_package }}"
+    state: present
+  become: true
+
 - name: Generate Consul encryption key if not set
   ansible.builtin.command: consul keygen
   register: consul_keygen_result
@@ -135,27 +156,6 @@
   when:
     - consul_encrypt_changed | default(false)
     - consul_server | default(false)
-
-- name: Ensure consul group
-  ansible.builtin.group:
-    name: "{{ consul_group }}"
-    system: true
-  become: true
-
-- name: Ensure consul user
-  ansible.builtin.user:
-    name: "{{ consul_user }}"
-    group: "{{ consul_group }}"
-    system: true
-    shell: /usr/sbin/nologin
-    create_home: false
-  become: true
-
-- name: Install Consul package
-  ansible.builtin.package:
-    name: "{{ consul_package }}"
-    state: present
-  become: true
 
 - name: Create Consul directories
   ansible.builtin.file:
