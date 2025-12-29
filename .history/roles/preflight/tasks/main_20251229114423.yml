@@ -2,17 +2,6 @@
 - name: Preflight checks
   when: preflight_enabled | bool
   block:
-    - name: Assert minimum Ansible version
-      ansible.builtin.assert:
-        that:
-          - ansible_version.full is version('2.14.0', '>=')
-        fail_msg: >-
-          Ansible version {{ ansible_version.full }} is too old.
-          Minimum required: 2.14.0. Please upgrade Ansible.
-        success_msg: "Ansible version {{ ansible_version.full }} meets requirements."
-      run_once: true
-      delegate_to: localhost
-
     - name: Assert supported OS
       ansible.builtin.assert:
         that:
@@ -206,9 +195,9 @@
           Please verify manually or stop conflicting services before proceeding.
       when:
         - preflight_check_ports | bool
-        - (consul_ports_check is defined and consul_ports_check is failed) or
-          (nomad_ports_check is defined and nomad_ports_check is failed) or
-          (vault_ports_check is defined and vault_ports_check is failed)
+        - (consul_ports_check is defined and consul_ports_check.failed) or
+          (nomad_ports_check is defined and nomad_ports_check.failed) or
+          (vault_ports_check is defined and vault_ports_check.failed)
 
     - name: Warn about raw_exec driver risks
       ansible.builtin.assert:

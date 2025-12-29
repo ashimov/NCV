@@ -2,17 +2,6 @@
 - name: Preflight checks
   when: preflight_enabled | bool
   block:
-    - name: Assert minimum Ansible version
-      ansible.builtin.assert:
-        that:
-          - ansible_version.full is version('2.14.0', '>=')
-        fail_msg: >-
-          Ansible version {{ ansible_version.full }} is too old.
-          Minimum required: 2.14.0. Please upgrade Ansible.
-        success_msg: "Ansible version {{ ansible_version.full }} meets requirements."
-      run_once: true
-      delegate_to: localhost
-
     - name: Assert supported OS
       ansible.builtin.assert:
         that:

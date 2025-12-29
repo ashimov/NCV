@@ -1,19 +1,9 @@
 ---
-- name: Update apt cache (Debian)
-  ansible.builtin.apt:
-    update_cache: yes
-    cache_valid_time: 3600
-  when: ansible_facts["os_family"] == "Debian"
-  become: true
-  retries: 3
-  delay: 5
-  register: apt_cache_update
-  until: apt_cache_update is success
-
 - name: Install base packages (Debian)
   ansible.builtin.apt:
     name: "{{ common_packages_debian }}"
     state: present
+    update_cache: false
   when: ansible_facts["os_family"] == "Debian"
   become: true
 
@@ -45,29 +35,16 @@
   when: ansible_facts["os_family"] == "Debian"
   become: true
 
-- name: Add HashiCorp repository (Debian)
-  ansible.builtin.apt_repository:
-    repo: >-
-      deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg]
-      https://apt.releases.hashicorp.com {{ ansible_facts["distribution_release"] }} main
-    state: present
-    update_cache: false
-  when: ansible_facts["os_family"] == "Debian"
-  become: true
-  retries: 3
-  delay: 5
-  register: hashicorp_repo
-  until: hashicorp_repo is success
-
-- name: Update apt cache after adding HashiCorp repo (Debian)
-  ansible.builtin.apt:
-    update_cache: yes
-  when:
-    - ansible_facts["os_family"] == "Debian"
-    - hashicorp_repo is changed
-  become: true
-  retries: 3
-  delay: 5
+# Temporarily disabled - repository already added manually
+# - name: Add HashiCorp repository (Debian)
+#   ansible.builtin.apt_repository:
+#     repo: >-
+#       deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg]
+#       https://apt.releases.hashicorp.com {{ ansible_facts["distribution_release"] }} main
+#     state: present
+#     update_cache: true
+#   when: ansible_facts["os_family"] == "Debian"
+#   become: true
 
 - name: Add HashiCorp repository (RedHat)
   ansible.builtin.yum_repository:

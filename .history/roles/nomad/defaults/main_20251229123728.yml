@@ -5,7 +5,7 @@ nomad_package: >-
     if nomad_version is not defined or nomad_version == 'latest'
     else
       (
-        'nomad=' + nomad_version + '*'
+        'nomad=' + nomad_version
         if (ansible_facts | default({})).get('os_family', '') == 'Debian'
         else 'nomad-' + nomad_version + '*'
       )
@@ -24,8 +24,8 @@ nomad_datacenter: dc1
 nomad_data_dir: /opt/nomad
 nomad_config_dir: /etc/nomad.d
 nomad_tls_dir: /etc/nomad.d/tls
-nomad_bind_addr: "{{ node_ip | default(ansible_host) | default(inventory_hostname) }}"
-nomad_advertise_addr: "{{ node_ip | default(ansible_host) | default(inventory_hostname) }}"
+nomad_bind_addr: "{{ ansible_host | default(inventory_hostname) }}"
+nomad_advertise_addr: "{{ ansible_host | default(inventory_hostname) }}"
 nomad_retry_join: []
 nomad_retry_join_cloud_enabled: false
 nomad_retry_join_cloud: []

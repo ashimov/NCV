@@ -4,8 +4,6 @@ all:
     ansible_user: bash
     ansible_become_password: "S6rk034!@#"
     cluster_name: ncv
-    cluster_domain: local
-    pki_root: "{{ playbook_dir }}/pki"
   children:
     pki_ca_host:
       hosts:

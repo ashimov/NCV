@@ -1,13 +1,4 @@
 ---
-- name: Set consul_server fact based on inventory group
-  ansible.builtin.set_fact:
-    consul_server: "{{ inventory_hostname in groups.get('consul_servers', []) }}"
-
-- name: Set consul_bootstrap_expect dynamically
-  ansible.builtin.set_fact:
-    consul_bootstrap_expect: "{{ groups['consul_servers'] | length }}"
-  when: consul_server | bool
-
 - name: Generate Consul encryption key if not set
   ansible.builtin.command: consul keygen
   register: consul_keygen_result
@@ -17,15 +8,6 @@
     - inventory_hostname == groups['consul_servers'][0]
   run_once: true
   become: true
-
-- name: Ensure pki_root directory exists for key storage
-  ansible.builtin.file:
-    path: "{{ pki_root }}"
-    state: directory
-    mode: "0750"
-  delegate_to: localhost
-  run_once: true
-  when: consul_encrypt | length == 0
 
 - name: Save consul_encrypt key to file
   ansible.builtin.copy:
@@ -88,14 +70,12 @@
 - name: Extract encrypt key from existing config
   ansible.builtin.set_fact:
     consul_existing_encrypt_key: >-
-      {%- if consul_existing_config.content is defined -%}
-        {%- set decoded = consul_existing_config.content | b64decode | default('') -%}
-        {%- set match = decoded | regex_search('encrypt\s*=\s*"([^"]+)"', '\\1') -%}
-        {{ (match | first) if match else '' }}
-      {%- else -%}
-        {{ '' }}
-      {%- endif -%}
-  when: consul_config_stat.stat.exists | default(false)
+      {{
+        ((consul_existing_config.content | b64decode | regex_search('encrypt\s*=\s*"([^"]+)"', '\\1')) | default([''], true) | first)
+        if consul_existing_config.content is defined
+        else ''
+      }}
+  when: consul_config_stat.stat.exists
 
 - name: Detect encrypt key change
   ansible.builtin.set_fact:

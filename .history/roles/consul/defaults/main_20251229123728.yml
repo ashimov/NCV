@@ -5,7 +5,7 @@ consul_package: >-
     if consul_version is not defined or consul_version == 'latest'
     else
       (
-        'consul=' + consul_version + '*'
+        'consul=' + consul_version
         if (ansible_facts | default({})).get('os_family', '') == 'Debian'
         else 'consul-' + consul_version + '*'
       )
@@ -25,8 +25,8 @@ consul_tls_dir: /etc/consul.d/tls
 consul_http_port: 8500
 consul_https_port: 8501
 consul_http_disable: true
-consul_bind_addr: "{{ node_ip | default(ansible_host) | default(inventory_hostname) }}"
-consul_advertise_addr: "{{ node_ip | default(ansible_host) | default(inventory_hostname) }}"
+consul_bind_addr: "{{ ansible_host | default(inventory_hostname) }}"
+consul_advertise_addr: "{{ ansible_host | default(inventory_hostname) }}"
 consul_client_addr: "0.0.0.0"
 consul_retry_join: []
 consul_retry_join_cloud_enabled: false
@@ -44,6 +44,6 @@ consul_acl_replication_token: ""
 
 consul_tls_enabled: true
 consul_tls_source: pki
-consul_tls_ca_src: "{{ pki_root | default(playbook_dir + '/pki') }}/ca/ca.pem"
-consul_tls_cert_src: "{{ pki_root | default(playbook_dir + '/pki') }}/hosts/{{ inventory_hostname }}/cert.pem"
-consul_tls_key_src: "{{ pki_root | default(playbook_dir + '/pki') }}/hosts/{{ inventory_hostname }}/key.pem"
+consul_tls_ca_src: "{{ pki_root }}/ca/ca.pem"
+consul_tls_cert_src: "{{ pki_root }}/hosts/{{ inventory_hostname }}/cert.pem"
+consul_tls_key_src: "{{ pki_root }}/hosts/{{ inventory_hostname }}/key.pem"
