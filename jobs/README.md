@@ -5,6 +5,7 @@ They are intended as starting points; adjust images, resources, volumes, and
 secrets for your environment.
 
 ## Structure
+- `jobs/enabled/` - curated jobs intended for automatic deployment
 - `jobs/services/` - single-service jobs
 - `jobs/stacks/` - multi-service stacks (example: ELK)
 - `jobs/examples/` - patterns for raw_exec, Windows, and Vault templates
@@ -17,6 +18,11 @@ secrets for your environment.
 - Consul/Vault jobs require explicit `task_args`; provide production configs.
 - Some services (nginx-ingress, jitsi, freeipa, gitlab-runner, kafka) require
   extra configuration beyond the defaults here.
+- When using `nomad_jobs`, point `nomad_jobs_dir` at `jobs/enabled` to avoid
+  deploying examples unintentionally.
+- Jobs in `jobs/enabled` that talk to Consul/Nomad/Vault use mTLS by default and
+  expect TLS files on the host under `/etc/consul.d/tls`, `/etc/nomad.d/tls`,
+  and `/etc/vault.d/tls`. Override `*_tls_*_src` variables if your paths differ.
 - The Docker job does not expose a TCP daemon by default; if you enable TCP,
   use TLS and restrict access.
 - Secrets can be injected via Vault templates (see `jobs/examples/vault-template-example.hcl`).

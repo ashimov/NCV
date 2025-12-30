@@ -7,20 +7,21 @@
 # - Keycloak running and accessible at KEYCLOAK_URL
 # - curl and jq installed
 
-set -e
+set -euo pipefail
 
 # Configuration
 KEYCLOAK_URL="${KEYCLOAK_URL:-https://keycloak.ashimov.com}"
 KEYCLOAK_ADMIN="${KEYCLOAK_ADMIN:-admin}"
-KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-Admin123!}"
-REALM_NAME="ncv"
-DOMAIN="ashimov.com"
+KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-}"
+REALM_NAME="${REALM_NAME:-ncv}"
+DOMAIN="${DOMAIN:-ashimov.com}"
+KEYCLOAK_SKIP_TLS_VERIFY="${KEYCLOAK_SKIP_TLS_VERIFY:-false}"
 
 # User credentials
-USER_EMAIL="berik@ashimov.com"
-USER_PASSWORD="sBcqF78tk0!@#"
-USER_FIRST_NAME="Berik"
-USER_LAST_NAME="Ashimov"
+USER_EMAIL="${USER_EMAIL:-berik@ashimov.com}"
+USER_PASSWORD="${USER_PASSWORD:-}"
+USER_FIRST_NAME="${USER_FIRST_NAME:-Berik}"
+USER_LAST_NAME="${USER_LAST_NAME:-Ashimov}"
 
 # Client configurations
 TRAEFIK_CLIENT_ID="traefik"
@@ -44,6 +45,38 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Curl helper with optional TLS verification skip
+CURL_OPTS=(-s)
+if [[ "${KEYCLOAK_SKIP_TLS_VERIFY}" == "true" ]]; then
+    CURL_OPTS+=(-k)
+fi
+
+kc_curl() {
+    curl "${CURL_OPTS[@]}" "$@"
+}
+
+check_prerequisites() {
+    if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+        log_error "KEYCLOAK_ADMIN_PASSWORD is not set"
+        exit 1
+    fi
+
+    if [ -z "$USER_PASSWORD" ]; then
+        log_error "USER_PASSWORD is not set"
+        exit 1
+    fi
+
+    if ! command -v curl >/dev/null 2>&1; then
+        log_error "curl not found"
+        exit 1
+    fi
+
+    if ! command -v jq >/dev/null 2>&1; then
+        log_error "jq not found"
+        exit 1
+    fi
+}
+
 # Wait for Keycloak to be ready
 wait_for_keycloak() {
     log_info "Waiting for Keycloak to be ready..."
@@ -51,7 +84,7 @@ wait_for_keycloak() {
     local attempt=1
     
     while [ $attempt -le $max_attempts ]; do
-        if curl -s -k "${KEYCLOAK_URL}/health/ready" | grep -q "UP"; then
+        if kc_curl "${KEYCLOAK_URL}/health/ready" | grep -q "UP"; then
             log_info "Keycloak is ready!"
             return 0
         fi
@@ -68,7 +101,7 @@ wait_for_keycloak() {
 get_admin_token() {
     log_info "Getting admin access token..."
     
-    TOKEN=$(curl -s -k -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+    TOKEN=$(kc_curl -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=${KEYCLOAK_ADMIN}" \
         -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
@@ -88,7 +121,7 @@ create_realm() {
     log_info "Creating realm: ${REALM_NAME}..."
     
     # Check if realm exists
-    REALM_EXISTS=$(curl -s -k -o /dev/null -w "%{http_code}" \
+    REALM_EXISTS=$(kc_curl -o /dev/null -w "%{http_code}" \
         -H "Authorization: Bearer ${TOKEN}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}")
     
@@ -97,7 +130,7 @@ create_realm() {
         return 0
     fi
     
-    curl -s -k -X POST "${KEYCLOAK_URL}/admin/realms" \
+    kc_curl -X POST "${KEYCLOAK_URL}/admin/realms" \
         -H "Authorization: Bearer ${TOKEN}" \
         -H "Content-Type: application/json" \
         -d '{
@@ -146,14 +179,14 @@ create_traefik_client() {
     log_info "Creating Traefik OIDC client..."
     
     # Check if client exists
-    CLIENT_ID=$(curl -s -k \
+    CLIENT_ID=$(kc_curl \
         -H "Authorization: Bearer ${TOKEN}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=${TRAEFIK_CLIENT_ID}" | jq -r '.[0].id')
     
     if [ "$CLIENT_ID" != "null" ] && [ -n "$CLIENT_ID" ]; then
         log_warn "Traefik client already exists, updating..."
         
-        curl -s -k -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_ID}" \
+        kc_curl -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_ID}" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{
@@ -182,7 +215,7 @@ create_traefik_client() {
                 "optionalClientScopes": ["roles"]
             }'
     else
-        curl -s -k -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
+        kc_curl -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{
@@ -191,7 +224,6 @@ create_traefik_client() {
                 "description": "OIDC client for Traefik Forward Auth",
                 "enabled": true,
                 "clientAuthenticatorType": "client-secret",
-                "secret": "traefik-client-secret-change-me",
                 "redirectUris": [
                     "https://auth.'"${DOMAIN}"'/_oauth",
                     "https://traefik.'"${DOMAIN}"'/*",
@@ -214,11 +246,11 @@ create_traefik_client() {
     fi
     
     # Get client secret
-    CLIENT_ID=$(curl -s -k \
+    CLIENT_ID=$(kc_curl \
         -H "Authorization: Bearer ${TOKEN}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=${TRAEFIK_CLIENT_ID}" | jq -r '.[0].id')
     
-    TRAEFIK_SECRET=$(curl -s -k \
+    TRAEFIK_SECRET=$(kc_curl \
         -H "Authorization: Bearer ${TOKEN}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_ID}/client-secret" | jq -r '.value')
     
@@ -238,14 +270,14 @@ create_vault_client() {
     log_info "Creating Vault OIDC client..."
     
     # Check if client exists
-    CLIENT_ID=$(curl -s -k \
+    CLIENT_ID=$(kc_curl \
         -H "Authorization: Bearer ${TOKEN}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=${VAULT_CLIENT_ID}" | jq -r '.[0].id')
     
     if [ "$CLIENT_ID" != "null" ] && [ -n "$CLIENT_ID" ]; then
         log_warn "Vault client already exists, updating..."
         
-        curl -s -k -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_ID}" \
+        kc_curl -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_ID}" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{
@@ -275,7 +307,7 @@ create_vault_client() {
                 "optionalClientScopes": ["roles"]
             }'
     else
-        curl -s -k -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
+        kc_curl -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{
@@ -284,7 +316,6 @@ create_vault_client() {
                 "description": "OIDC client for Vault authentication",
                 "enabled": true,
                 "clientAuthenticatorType": "client-secret",
-                "secret": "vault-client-secret-change-me",
                 "redirectUris": [
                     "https://vault.'"${DOMAIN}"'/ui/vault/auth/oidc/oidc/callback",
                     "https://vault.'"${DOMAIN}"'/oidc/callback",
@@ -308,11 +339,11 @@ create_vault_client() {
     fi
     
     # Get client secret
-    CLIENT_ID=$(curl -s -k \
+    CLIENT_ID=$(kc_curl \
         -H "Authorization: Bearer ${TOKEN}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=${VAULT_CLIENT_ID}" | jq -r '.[0].id')
     
-    VAULT_SECRET=$(curl -s -k \
+    VAULT_SECRET=$(kc_curl \
         -H "Authorization: Bearer ${TOKEN}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_ID}/client-secret" | jq -r '.value')
     
@@ -332,7 +363,7 @@ create_user() {
     log_info "Creating user: ${USER_EMAIL}..."
     
     # Check if user exists
-    USER_ID=$(curl -s -k \
+    USER_ID=$(kc_curl \
         -H "Authorization: Bearer ${TOKEN}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?email=${USER_EMAIL}" | jq -r '.[0].id')
     
@@ -340,7 +371,7 @@ create_user() {
         log_warn "User ${USER_EMAIL} already exists, updating password..."
         
         # Update password
-        curl -s -k -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${USER_ID}/reset-password" \
+        kc_curl -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${USER_ID}/reset-password" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{
@@ -350,7 +381,7 @@ create_user() {
             }'
     else
         # Create user
-        curl -s -k -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users" \
+        kc_curl -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{
@@ -371,7 +402,7 @@ create_user() {
     fi
     
     # Get user ID
-    USER_ID=$(curl -s -k \
+    USER_ID=$(kc_curl \
         -H "Authorization: Bearer ${TOKEN}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?email=${USER_EMAIL}" | jq -r '.[0].id')
     
@@ -379,18 +410,18 @@ create_user() {
     log_info "Assigning admin roles to user..."
     
     # Get realm-management client ID
-    REALM_MGMT_CLIENT=$(curl -s -k \
+    REALM_MGMT_CLIENT=$(kc_curl \
         -H "Authorization: Bearer ${TOKEN}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=realm-management" | jq -r '.[0].id')
     
     if [ "$REALM_MGMT_CLIENT" != "null" ] && [ -n "$REALM_MGMT_CLIENT" ]; then
         # Get realm-admin role
-        ADMIN_ROLE=$(curl -s -k \
+        ADMIN_ROLE=$(kc_curl \
             -H "Authorization: Bearer ${TOKEN}" \
             "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${REALM_MGMT_CLIENT}/roles/realm-admin")
         
         # Assign role to user
-        curl -s -k -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${USER_ID}/role-mappings/clients/${REALM_MGMT_CLIENT}" \
+        kc_curl -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${USER_ID}/role-mappings/clients/${REALM_MGMT_CLIENT}" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "Content-Type: application/json" \
             -d "[${ADMIN_ROLE}]"
@@ -412,7 +443,7 @@ print_summary() {
     echo ""
     echo "User Credentials:"
     echo "  Email: ${USER_EMAIL}"
-    echo "  Password: ${USER_PASSWORD}"
+    echo "  Password: (set via USER_PASSWORD env var)"
     echo ""
     echo "=========================================="
     echo "NEXT STEPS"
@@ -443,6 +474,7 @@ print_summary() {
 main() {
     log_info "Starting Keycloak setup..."
     
+    check_prerequisites
     wait_for_keycloak
     get_admin_token
     create_realm

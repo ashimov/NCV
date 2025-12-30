@@ -52,7 +52,7 @@ load_balancer_enabled: false
 load_balancer_provider: aws
 
 # Nomad jobs (optional)
-nomad_jobs_enabled: true
+nomad_jobs_enabled: false
 nomad_jobs_dir: "{{ playbook_dir }}/jobs/enabled"
 nomad_jobs_tmp_dir: /var/tmp/nomad-jobs
 nomad_jobs_nomad_addr: "https://{{ node_ip }}:4646"

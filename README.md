@@ -64,6 +64,7 @@ Production-ready Ansible automation for deploying and managing a complete HashiC
 - [Operations](#operations)
   - [Preflight Checks](#preflight-checks)
   - [Cleanup (Reset)](#cleanup-reset)
+  - [Backups](#backups)
   - [Initial Deployment](#initial-deployment)
   - [Cluster Scaling](#cluster-scaling)
   - [Certificate Renewal](#certificate-renewal)
@@ -521,7 +522,7 @@ Nomad integrates with Consul for service discovery:
 ```yaml
 # group_vars/all.yml
 nomad_consul_enabled: true
-nomad_consul_address: "127.0.0.1:8500"
+nomad_consul_address: "127.0.0.1:8501"
 nomad_consul_token: "your-consul-token"  # Required if Consul ACLs enabled
 
 # TLS integration
@@ -553,8 +554,8 @@ nomad acl bootstrap
 ```yaml
 # group_vars/all.yml
 vault_storage_backend: consul
-vault_consul_address: "127.0.0.1:8500"
-vault_consul_token: "{{ vault_consul_token_vaulted | default('') }}"  # Set via Ansible Vault when ACLs are enabled
+vault_consul_address: "127.0.0.1:8501"
+vault_consul_token: "{{ vault_consul_token_secret | default('') }}"  # Set via Ansible Vault when ACLs are enabled
 ```
 
 **ACL Requirements:** When Consul ACLs are enabled, Vault requires a token with:
@@ -587,10 +588,10 @@ consul acl token create -policy-name vault -description "Vault storage backend"
 Store the token with Ansible Vault to avoid plaintext in inventories:
 
 ```bash
-ansible-vault encrypt_string --name vault_consul_token_vaulted "$VAULT_CONSUL_TOKEN" > group_vars/vault_servers.vault.yml
+ansible-vault encrypt_string --name vault_consul_token_secret "$VAULT_CONSUL_TOKEN" > group_vars/vault_servers.vault.yml
 ```
 
-Ansible will load `group_vars/vault_servers.vault.yml` automatically when it is encrypted. The value is exposed to the role as `vault_consul_token` via `vault_consul_token_vaulted`.
+Ansible will load `group_vars/vault_servers.vault.yml` automatically when it is encrypted. The value is exposed to the role as `vault_consul_token` via `vault_consul_token_secret`.
 ```
 
 **Option 2: Integrated Raft Storage**
@@ -741,10 +742,14 @@ nomad_jobs_nomad_addr: "https://127.0.0.1:4646"
 nomad_jobs_nomad_token: "your-nomad-token"  # If ACLs enabled
 ```
 
-Place your `.hcl` job files in `jobs/` directory:
+Place your `.hcl` job files in `jobs/` directory (recommended: `jobs/enabled`):
 
 ```
 jobs/
+├── enabled/
+│   ├── traefik-lb.hcl
+│   ├── consul-exporter.hcl
+│   └── nomad-exporter.hcl
 ├── services/
 │   ├── nginx.hcl
 │   ├── postgres.hcl
@@ -757,6 +762,16 @@ Jobs are automatically:
 - ✅ Planned before execution (`nomad job plan`)
 - ✅ Deployed with change detection
 - ✅ Handled securely (tokens protected with `no_log`)
+
+Recommended: limit auto-deployments to curated jobs by pointing `nomad_jobs_dir` to `jobs/enabled`:
+
+```yaml
+nomad_jobs_dir: "{{ playbook_dir }}/jobs/enabled"
+```
+
+Note: `jobs/enabled` Traefik and exporters use mTLS by default and expect TLS files on the host
+under `/etc/consul.d/tls`, `/etc/nomad.d/tls`, and `/etc/vault.d/tls`. Override `*_tls_*_src`
+variables in the job files if your paths differ.
 
 ### Load Balancer Planning
 
@@ -819,6 +834,17 @@ ansible-playbook -i inventories/prod/hosts.yml site.yml --tags cleanup \
   -e cleanup_remove_config=true \
   -e cleanup_remove_tls=true
 ```
+
+### Backups
+
+Run the backup role on demand:
+
+```bash
+ansible-playbook -i inventories/prod/hosts.yml site.yml --tags backup \
+  -e backup_enabled=true
+```
+
+Vault snapshots require `vault_storage_backend: raft` and an unsealed Vault; backups are skipped otherwise.
 
 ### Initial Deployment
 
@@ -883,7 +909,7 @@ export VAULT_CONSUL_TOKEN=$(consul acl token create -policy-name vault -format=j
 # Add to inventories/prod/group_vars/all.yml:
 #   consul_acl_agent_token: "<CONSUL_AGENT_TOKEN>"
 #   nomad_consul_token: "<NOMAD_CONSUL_TOKEN>"
-#   vault_consul_token_vaulted: "<VAULT_CONSUL_TOKEN>"  # store with ansible-vault encrypt_string
+#   vault_consul_token_secret: "<VAULT_CONSUL_TOKEN>"  # store with ansible-vault encrypt_string
 
 ansible-playbook -i inventories/prod/hosts.yml site.yml
 
@@ -992,7 +1018,7 @@ All services include automatic health checks with retries:
 
 ```yaml
 # Consul health check (automatic)
-# GET http(s)://127.0.0.1:8500/v1/status/leader
+# GET http(s)://127.0.0.1:8501/v1/status/leader
 # Retries: 30 × 2s = 60s timeout
 
 # Nomad health check (automatic)

@@ -34,7 +34,11 @@ jobs:
         run: |
           echo "Checking for potential secrets in code..."
           # Fail if we find suspicious patterns
-          ! grep -r "password.*=.*['\"].*['\"]" --exclude-dir={.git,pki,collections,.github} --exclude="*.md" --exclude="vault.yml.example" . || exit 0
+          ! grep -r "password.*=.*['\"].*['\"]" \
+            --exclude-dir={.git,pki,collections,.github} \
+            --exclude="*.md" \
+            --exclude="vault.yml.example" \
+            . || exit 0
           ! grep -r "BEGIN.*PRIVATE KEY" --exclude-dir={.git,pki,collections} . || exit 0
           echo "✅ No obvious secrets detected."
 

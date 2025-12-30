@@ -28,6 +28,7 @@ This role provides automated backup functionality for HashiCorp Consul, Nomad, a
 | -------- | ------- | ----------- |
 | `backup_enabled` | `false` | Master enable/disable switch |
 | `backup_dir` | `{{ playbook_dir }}/backups` | Directory for backup storage |
+| `backup_tmp_dir` | `/var/tmp/ncv-backups` | Temp directory on target hosts |
 | `backup_timestamp_format` | `%Y%m%d_%H%M%S` | Timestamp format for backups |
 
 ### Consul Backup
@@ -36,7 +37,7 @@ This role provides automated backup functionality for HashiCorp Consul, Nomad, a
 | -------- | ------- | ----------- |
 | `backup_consul_enabled` | `true` | Enable Consul backups |
 | `backup_consul_snapshot` | `true` | Create Consul snapshots |
-| `backup_consul_acl_tokens` | `false` | Backup ACL tokens (sensitive!) |
+| `backup_consul_token` | `""` | Consul ACL token for snapshot access |
 
 ### Nomad Backup
 
@@ -44,6 +45,7 @@ This role provides automated backup functionality for HashiCorp Consul, Nomad, a
 | -------- | ------- | ----------- |
 | `backup_nomad_enabled` | `true` | Enable Nomad backups |
 | `backup_nomad_snapshot` | `true` | Create Nomad snapshots |
+| `backup_nomad_token` | `""` | Nomad ACL token for snapshot access |
 
 ### Vault Backup
 
@@ -51,8 +53,9 @@ This role provides automated backup functionality for HashiCorp Consul, Nomad, a
 | -------- | ------- | ----------- |
 | `backup_vault_enabled` | `false` | Enable Vault backups |
 | `backup_vault_snapshot` | `false` | Create Vault snapshots |
+| `backup_vault_token` | `""` | Vault token for snapshot access |
 
-⚠️ **Note**: Vault must be unsealed for snapshots to work.
+⚠️ **Note**: Vault must be unsealed and use `raft` storage for snapshots to work.
 
 ### Retention
 
@@ -67,8 +70,11 @@ This role provides automated backup functionality for HashiCorp Consul, Nomad, a
 
 ```bash
 # Run backup for all services
-ansible-playbook -i inventories/prod/hosts.yml site.yml --tags backup
+ansible-playbook -i inventories/prod/hosts.yml site.yml --tags backup \
+  -e backup_enabled=true
 ```
+
+The backup role is included in `site.yml` as an optional play; enable it via `backup_enabled`.
 
 ### Enable Backups
 
@@ -102,6 +108,8 @@ backups/
 ├── nomad_20251229_120000.snap.gz
 └── vault_20251229_120000.snap.gz
 ```
+
+Snapshots are created on target hosts and fetched to `backup_dir` on the control node.
 
 ## Restoration
 
@@ -174,7 +182,7 @@ jobs:
 ⚠️ **Important Security Notes**:
 
 1. **Backup Directory Permissions**: Default mode is `0700` (owner only)
-2. **ACL Tokens**: Set `backup_consul_acl_tokens: false` unless absolutely necessary
+2. **ACL Tokens**: Use a least-privilege token via `backup_consul_token`
 3. **Encryption**: Consider encrypting backup directory at rest
 4. **Off-site Storage**: Copy backups to remote storage for disaster recovery
 5. **Access Control**: Restrict access to backup directory

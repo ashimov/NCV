@@ -10,21 +10,68 @@
 
 - name: Set backup timestamp
   ansible.builtin.set_fact:
-    backup_timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
+    backup_timestamp: >-
+      {{
+        (ansible_date_time.epoch | int) | strftime(backup_timestamp_format)
+        if ansible_date_time is defined
+        else lookup('pipe', 'date +' ~ backup_timestamp_format)
+      }}
+  delegate_to: localhost
   run_once: true
   when: backup_enabled
 
 - name: Backup Consul data
   when: backup_enabled and backup_consul_enabled and backup_consul_snapshot
+  vars:
+    backup_consul_env: >-
+      {{
+        {
+          'CONSUL_HTTP_ADDR': (consul_tls_enabled | default(true))
+            | ternary('https://127.0.0.1:' ~ consul_https_port, 'http://127.0.0.1:' ~ consul_http_port)
+        }
+        | combine((consul_tls_enabled | default(true)) | ternary({
+            'CONSUL_CACERT': consul_tls_dir + '/ca.pem',
+            'CONSUL_CLIENT_CERT': consul_tls_dir + '/cert.pem',
+            'CONSUL_CLIENT_KEY': consul_tls_dir + '/key.pem'
+          }, {}))
+        | combine((backup_consul_token | length > 0) | ternary({'CONSUL_HTTP_TOKEN': backup_consul_token}, {}))
+      }}
   block:
+    - name: Ensure Consul backup temp directory
+      ansible.builtin.file:
+        path: "{{ backup_tmp_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: "{{ groups['consul_servers'][0] }}"
+      run_once: true
+      become: true
+
     - name: Create Consul snapshot
       ansible.builtin.command: >-
         consul snapshot save
-        {{ backup_dir }}/consul_{{ backup_timestamp }}.snap
+        {{ backup_tmp_dir }}/consul_{{ backup_timestamp }}.snap
+      environment: "{{ backup_consul_env }}"
       delegate_to: "{{ groups['consul_servers'][0] }}"
       run_once: true
       become: true
       changed_when: true
+
+    - name: Fetch Consul snapshot
+      ansible.builtin.fetch:
+        src: "{{ backup_tmp_dir }}/consul_{{ backup_timestamp }}.snap"
+        dest: "{{ backup_dir }}/consul_{{ backup_timestamp }}.snap"
+        flat: true
+      delegate_to: "{{ groups['consul_servers'][0] }}"
+      run_once: true
+      become: true
+
+    - name: Remove Consul snapshot from server
+      ansible.builtin.file:
+        path: "{{ backup_tmp_dir }}/consul_{{ backup_timestamp }}.snap"
+        state: absent
+      delegate_to: "{{ groups['consul_servers'][0] }}"
+      run_once: true
+      become: true
 
     - name: Compress Consul snapshot
       community.general.archive:
@@ -39,15 +86,56 @@
 
 - name: Backup Nomad data
   when: backup_enabled and backup_nomad_enabled and backup_nomad_snapshot
+  vars:
+    backup_nomad_env: >-
+      {{
+        {
+          'NOMAD_ADDR': (nomad_tls_enabled | default(true))
+            | ternary('https://127.0.0.1:4646', 'http://127.0.0.1:4646')
+        }
+        | combine((nomad_tls_enabled | default(true)) | ternary({
+            'NOMAD_CACERT': nomad_tls_dir + '/ca.pem',
+            'NOMAD_CLIENT_CERT': nomad_tls_dir + '/cert.pem',
+            'NOMAD_CLIENT_KEY': nomad_tls_dir + '/key.pem'
+          }, {}))
+        | combine((backup_nomad_token | length > 0) | ternary({'NOMAD_TOKEN': backup_nomad_token}, {}))
+      }}
   block:
+    - name: Ensure Nomad backup temp directory
+      ansible.builtin.file:
+        path: "{{ backup_tmp_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: "{{ groups['nomad_servers'][0] }}"
+      run_once: true
+      become: true
+
     - name: Create Nomad snapshot
       ansible.builtin.command: >-
         nomad operator snapshot save
-        {{ backup_dir }}/nomad_{{ backup_timestamp }}.snap
+        {{ backup_tmp_dir }}/nomad_{{ backup_timestamp }}.snap
+      environment: "{{ backup_nomad_env }}"
       delegate_to: "{{ groups['nomad_servers'][0] }}"
       run_once: true
       become: true
       changed_when: true
+
+    - name: Fetch Nomad snapshot
+      ansible.builtin.fetch:
+        src: "{{ backup_tmp_dir }}/nomad_{{ backup_timestamp }}.snap"
+        dest: "{{ backup_dir }}/nomad_{{ backup_timestamp }}.snap"
+        flat: true
+      delegate_to: "{{ groups['nomad_servers'][0] }}"
+      run_once: true
+      become: true
+
+    - name: Remove Nomad snapshot from server
+      ansible.builtin.file:
+        path: "{{ backup_tmp_dir }}/nomad_{{ backup_timestamp }}.snap"
+        state: absent
+      delegate_to: "{{ groups['nomad_servers'][0] }}"
+      run_once: true
+      become: true
 
     - name: Compress Nomad snapshot
       community.general.archive:
@@ -60,15 +148,50 @@
       run_once: true
       when: backup_compression
 
+- name: Warn when Vault backend is not raft
+  ansible.builtin.debug:
+    msg: "Vault snapshots are supported only with raft storage. Skipping Vault backup."
+  when:
+    - backup_enabled
+    - backup_vault_enabled
+    - backup_vault_snapshot
+    - vault_storage_backend != 'raft'
+  run_once: true
+
 - name: Backup Vault data
-  when: backup_enabled and backup_vault_enabled and backup_vault_snapshot
+  when:
+    - backup_enabled
+    - backup_vault_enabled
+    - backup_vault_snapshot
+    - vault_storage_backend == 'raft'
+  vars:
+    backup_vault_env: >-
+      {{
+        {
+          'VAULT_ADDR': vault_api_addr
+        }
+        | combine((vault_tls_enabled | default(true)) | ternary({
+            'VAULT_CACERT': vault_tls_dir + '/ca.pem'
+          }, {}))
+        | combine((backup_vault_token | length > 0) | ternary({'VAULT_TOKEN': backup_vault_token}, {}))
+      }}
   block:
+    - name: Ensure Vault backup temp directory
+      ansible.builtin.file:
+        path: "{{ backup_tmp_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: "{{ groups['vault_servers'][0] }}"
+      run_once: true
+      become: true
+
     - name: Check if Vault is unsealed
       ansible.builtin.uri:
         url: "{{ vault_api_addr }}/v1/sys/health"
-        validate_certs: false
+        validate_certs: "{{ vault_tls_enabled | default(true) }}"
+        ca_path: "{{ (vault_tls_enabled | default(true)) | ternary(vault_tls_dir + '/ca.pem', omit) }}"
         status_code: [200]
-      register: vault_health
+      register: backup_vault_health
       failed_when: false
       delegate_to: "{{ groups['vault_servers'][0] }}"
       run_once: true
@@ -76,17 +199,37 @@
     - name: Warn if Vault is sealed
       ansible.builtin.debug:
         msg: "WARNING: Vault is sealed. Skipping Vault backup."
-      when: vault_health.status | default(0) != 200
+      when: backup_vault_health.status | default(0) != 200
 
     - name: Create Vault snapshot
       ansible.builtin.command: >
         vault operator raft snapshot save
-        {{ backup_dir }}/vault_{{ backup_timestamp }}.snap
+        {{ backup_tmp_dir }}/vault_{{ backup_timestamp }}.snap
+      environment: "{{ backup_vault_env }}"
       delegate_to: "{{ groups['vault_servers'][0] }}"
       run_once: true
       become: true
       changed_when: true
-      when: vault_health.status | default(0) == 200
+      when: backup_vault_health.status | default(0) == 200
+
+    - name: Fetch Vault snapshot
+      ansible.builtin.fetch:
+        src: "{{ backup_tmp_dir }}/vault_{{ backup_timestamp }}.snap"
+        dest: "{{ backup_dir }}/vault_{{ backup_timestamp }}.snap"
+        flat: true
+      delegate_to: "{{ groups['vault_servers'][0] }}"
+      run_once: true
+      when: backup_vault_health.status | default(0) == 200
+      become: true
+
+    - name: Remove Vault snapshot from server
+      ansible.builtin.file:
+        path: "{{ backup_tmp_dir }}/vault_{{ backup_timestamp }}.snap"
+        state: absent
+      delegate_to: "{{ groups['vault_servers'][0] }}"
+      run_once: true
+      become: true
+      when: backup_vault_health.status | default(0) == 200
 
     - name: Compress Vault snapshot
       community.general.archive:
@@ -99,7 +242,7 @@
       run_once: true
       when:
         - backup_compression
-        - vault_health.status | default(0) == 200
+        - backup_vault_health.status | default(0) == 200
 
 - name: Remove old backups
   ansible.builtin.find:

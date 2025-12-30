@@ -21,9 +21,10 @@ variable "keycloak_admin" {
   default = "admin"
 }
 
+# Required: set via vars file or CLI
 variable "keycloak_admin_password" {
   type    = string
-  default = "Admin123!"
+  default = ""
 }
 
 variable "postgres_host" {
@@ -36,9 +37,10 @@ variable "postgres_user" {
   default = "keycloak"
 }
 
+# Required: set via vars file or CLI
 variable "postgres_password" {
   type    = string
-  default = "keycloak123"
+  default = ""
 }
 
 variable "postgres_db" {
@@ -57,12 +59,6 @@ variable "keycloak_replicas" {
 job "keycloak-db" {
   datacenters = var.datacenters
   type        = "service"
-
-  # Pin to specific node for persistent storage
-  constraint {
-    attribute = "${attr.unique.hostname}"
-    value     = "nomad-w2"
-  }
 
   group "postgres" {
     count = 1

@@ -16,19 +16,42 @@
 
     - name: Assert Consul TLS files exist
       ansible.builtin.assert:
-        that: "{{ consul_tls_stats.results | map(attribute='stat.exists') | list | min }}"
-        fail_msg: "Missing Consul TLS files: {{ consul_tls_stats.results | selectattr('stat.exists', 'equalto', False) | map(attribute='item') | list }}"
+        that: >-
+          {{
+            consul_tls_stats.results
+            | map(attribute='stat.exists')
+            | list
+            | min
+          }}
+        fail_msg: >-
+          Missing Consul TLS files: {{
+            consul_tls_stats.results
+            | selectattr('stat.exists', 'equalto', False)
+            | map(attribute='item')
+            | list
+          }}
       when: consul_tls_enabled | bool
 
     - name: Check Consul binary version
       ansible.builtin.command: consul version
       register: consul_version_cmd
       changed_when: false
-      failed_when: consul_version is defined and (consul_version_cmd.rc != 0 or consul_version not in consul_version_cmd.stdout)
+      failed_when: >-
+        consul_version is defined and
+        (
+          consul_version_cmd.rc != 0
+          or consul_version not in consul_version_cmd.stdout
+        )
 
     - name: Check Consul API is reachable
       ansible.builtin.uri:
-        url: "{{ (consul_tls_enabled | bool) | ternary('https', 'http') }}://127.0.0.1:{{ (consul_tls_enabled | bool) | ternary(consul_https_port, consul_http_port) }}/v1/status/leader"
+        url: >-
+          {{
+            (consul_tls_enabled | bool) | ternary('https', 'http')
+            ~ '://127.0.0.1:'
+            ~ ((consul_tls_enabled | bool) | ternary(consul_https_port, consul_http_port))
+            ~ '/v1/status/leader'
+          }}
         method: GET
         validate_certs: "{{ consul_tls_enabled | bool }}"
         ca_path: "{{ consul_tls_enabled | bool | ternary(consul_tls_dir + '/ca.pem', omit) }}"
@@ -59,15 +82,32 @@
 
     - name: Assert Nomad TLS files exist
       ansible.builtin.assert:
-        that: "{{ nomad_tls_stats.results | map(attribute='stat.exists') | list | min }}"
-        fail_msg: "Missing Nomad TLS files: {{ nomad_tls_stats.results | selectattr('stat.exists', 'equalto', False) | map(attribute='item') | list }}"
+        that: >-
+          {{
+            nomad_tls_stats.results
+            | map(attribute='stat.exists')
+            | list
+            | min
+          }}
+        fail_msg: >-
+          Missing Nomad TLS files: {{
+            nomad_tls_stats.results
+            | selectattr('stat.exists', 'equalto', False)
+            | map(attribute='item')
+            | list
+          }}
       when: nomad_tls_enabled | bool
 
     - name: Check Nomad binary version
       ansible.builtin.command: nomad version
       register: nomad_version_cmd
       changed_when: false
-      failed_when: nomad_version is defined and (nomad_version_cmd.rc != 0 or nomad_version not in nomad_version_cmd.stdout)
+      failed_when: >-
+        nomad_version is defined and
+        (
+          nomad_version_cmd.rc != 0
+          or nomad_version not in nomad_version_cmd.stdout
+        )
 
     - name: Check Nomad API is reachable
       ansible.builtin.uri:
@@ -101,15 +141,32 @@
 
     - name: Assert Vault TLS files exist
       ansible.builtin.assert:
-        that: "{{ vault_tls_stats.results | map(attribute='stat.exists') | list | min }}"
-        fail_msg: "Missing Vault TLS files: {{ vault_tls_stats.results | selectattr('stat.exists', 'equalto', False) | map(attribute='item') | list }}"
+        that: >-
+          {{
+            vault_tls_stats.results
+            | map(attribute='stat.exists')
+            | list
+            | min
+          }}
+        fail_msg: >-
+          Missing Vault TLS files: {{
+            vault_tls_stats.results
+            | selectattr('stat.exists', 'equalto', False)
+            | map(attribute='item')
+            | list
+          }}
       when: vault_tls_enabled | bool
 
     - name: Check Vault binary version
       ansible.builtin.command: vault version
       register: vault_version_cmd
       changed_when: false
-      failed_when: vault_version is defined and (vault_version_cmd.rc != 0 or vault_version not in vault_version_cmd.stdout)
+      failed_when: >-
+        vault_version is defined and
+        (
+          vault_version_cmd.rc != 0
+          or vault_version not in vault_version_cmd.stdout
+        )
 
     - name: Check Vault health endpoint
       ansible.builtin.uri:
@@ -126,4 +183,3 @@
           - 503  # sealed or standby without leader
       register: vault_health
       changed_when: false
-*** End Patch

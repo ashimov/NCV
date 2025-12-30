@@ -1,14 +1,14 @@
 ---
 - name: Update apt cache (Debian)
   ansible.builtin.apt:
-    update_cache: yes
+    update_cache: true
     cache_valid_time: 3600
   when: ansible_facts["os_family"] == "Debian"
   become: true
   retries: 3
   delay: 5
-  register: apt_cache_update
-  until: apt_cache_update is success
+  register: common_apt_cache_update
+  until: common_apt_cache_update is success
 
 - name: Install base packages (Debian)
   ansible.builtin.apt:
@@ -38,13 +38,36 @@
   become: true
 
 - name: Add HashiCorp GPG key (Debian)
-  ansible.builtin.shell: |
-    wget -qO- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-    chmod 644 /usr/share/keyrings/hashicorp-archive-keyring.gpg
-  args:
-    creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
-  when: ansible_facts["os_family"] == "Debian"
-  become: true
+  block:
+    - name: Download HashiCorp GPG key
+      ansible.builtin.get_url:
+        url: https://apt.releases.hashicorp.com/gpg
+        dest: /tmp/hashicorp.gpg
+        mode: "0644"
+      when: ansible_facts["os_family"] == "Debian"
+      become: true
+
+    - name: Create keyring from HashiCorp GPG key
+      ansible.builtin.command: >-
+        gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg /tmp/hashicorp.gpg
+      args:
+        creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      when: ansible_facts["os_family"] == "Debian"
+      become: true
+
+    - name: Ensure keyring permissions
+      ansible.builtin.file:
+        path: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        mode: "0644"
+      when: ansible_facts["os_family"] == "Debian"
+      become: true
+
+    - name: Remove temporary HashiCorp key file
+      ansible.builtin.file:
+        path: /tmp/hashicorp.gpg
+        state: absent
+      when: ansible_facts["os_family"] == "Debian"
+      become: true
 
 - name: Add HashiCorp repository (Debian)
   ansible.builtin.apt_repository:
@@ -57,15 +80,15 @@
   become: true
   retries: 3
   delay: 5
-  register: hashicorp_repo
-  until: hashicorp_repo is success
+  register: common_hashicorp_repo
+  until: common_hashicorp_repo is success
 
 - name: Update apt cache after adding HashiCorp repo (Debian)
   ansible.builtin.apt:
-    update_cache: yes
+    update_cache: true
   when:
     - ansible_facts["os_family"] == "Debian"
-    - hashicorp_repo is changed
+    - common_hashicorp_repo is changed
   become: true
   retries: 3
   delay: 5

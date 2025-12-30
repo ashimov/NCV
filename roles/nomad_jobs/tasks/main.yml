@@ -16,6 +16,18 @@
   run_once: true
   when: nomad_jobs_enabled
 
+- name: Build Nomad job relative paths
+  ansible.builtin.set_fact:
+    nomad_jobs_relative_paths: >-
+      {{
+        nomad_jobs_files.files
+        | map(attribute='path')
+        | map('regex_replace', '^' ~ nomad_jobs_dir ~ '/?', '')
+        | list
+      }}
+  run_once: true
+  when: nomad_jobs_enabled
+
 - name: Append Nomad token to environment when provided
   ansible.builtin.set_fact:
     nomad_jobs_env: "{{ nomad_jobs_env | combine({'NOMAD_TOKEN': nomad_jobs_nomad_token}) }}"
@@ -41,10 +53,24 @@
   run_once: true
   when: nomad_jobs_enabled
 
+- name: Ensure Nomad jobs subdirectories
+  ansible.builtin.file:
+    path: "{{ nomad_jobs_tmp_dir }}/{{ item }}"
+    state: directory
+    mode: "0750"
+  delegate_to: "{{ nomad_jobs_delegate }}"
+  run_once: true
+  loop: "{{ nomad_jobs_relative_paths | map('dirname') | reject('equalto', '.') | unique | list }}"
+  when:
+    - nomad_jobs_enabled
+    - nomad_jobs_relative_paths is defined
+
 - name: Copy Nomad job files
+  vars:
+    nomad_job_rel_path: "{{ item.path | regex_replace('^' ~ nomad_jobs_dir ~ '/?', '') }}"
   ansible.builtin.copy:
     src: "{{ item.path }}"
-    dest: "{{ nomad_jobs_tmp_dir }}/{{ item.path | basename }}"
+    dest: "{{ nomad_jobs_tmp_dir }}/{{ nomad_job_rel_path }}"
     mode: "0644"
   delegate_to: "{{ nomad_jobs_delegate }}"
   run_once: true
@@ -52,24 +78,28 @@
   when: nomad_jobs_enabled
 
 - name: Plan Nomad jobs
-  ansible.builtin.command: "nomad job plan {{ nomad_jobs_tmp_dir }}/{{ item.path | basename }}"
+  vars:
+    nomad_job_rel_path: "{{ item.path | regex_replace('^' ~ nomad_jobs_dir ~ '/?', '') }}"
+  ansible.builtin.command: "nomad job plan {{ nomad_jobs_tmp_dir }}/{{ nomad_job_rel_path }}"
   environment: "{{ nomad_jobs_env }}"
   register: nomad_jobs_plan
   delegate_to: "{{ nomad_jobs_delegate }}"
   run_once: true
   loop: "{{ nomad_jobs_files.files | default([]) }}"
   when: nomad_jobs_enabled
-  failed_when: false
+  failed_when: item.rc not in [0, 255]
   changed_when: false
   become: true
 
 - name: Run Nomad jobs
-  ansible.builtin.command: "nomad job run {{ nomad_jobs_tmp_dir }}/{{ item.item.path | basename }}"
+  vars:
+    nomad_job_rel_path: "{{ item.item.path | regex_replace('^' ~ nomad_jobs_dir ~ '/?', '') }}"
+  ansible.builtin.command: "nomad job run {{ nomad_jobs_tmp_dir }}/{{ nomad_job_rel_path }}"
   environment: "{{ nomad_jobs_env }}"
   changed_when: "'Deployment ID' in item.stdout or 'Job registration successful' in item.stdout"
   delegate_to: "{{ nomad_jobs_delegate }}"
   run_once: true
   loop: "{{ nomad_jobs_plan.results }}"
   throttle: 3
-  when: nomad_jobs_enabled and item.rc in [0, 1, 255]
+  when: nomad_jobs_enabled and item.rc in [0, 255]
   become: true

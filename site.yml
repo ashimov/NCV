@@ -65,6 +65,13 @@
     - role: nomad_jobs
       tags: [nomad_jobs]
 
+- name: Backup (optional)
+  hosts: "consul_servers:nomad_servers:vault_servers"
+  gather_facts: true
+  roles:
+    - role: backup
+      tags: [backup]
+
 - name: Load balancer plan (optional)
   hosts: load_balancer
   gather_facts: false

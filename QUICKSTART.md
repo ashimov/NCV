@@ -105,6 +105,13 @@ ansible-playbook -i inventories/quickstart/hosts.yml site.yml --tags nomad
 ansible-playbook -i inventories/quickstart/hosts.yml site.yml --tags vault
 ```
 
+### Backups (Optional)
+
+```bash
+ansible-playbook -i inventories/quickstart/hosts.yml site.yml --tags backup \
+  -e backup_enabled=true
+```
+
 ### Cleanup (Destructive, Optional)
 
 ```bash

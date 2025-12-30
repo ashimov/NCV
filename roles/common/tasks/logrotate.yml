@@ -16,7 +16,7 @@
           systemctl reload consul > /dev/null 2>&1 || true
         endscript
       }
-      
+
       /var/log/nomad/*.log {
         daily
         rotate 14
@@ -30,7 +30,6 @@
           systemctl reload nomad > /dev/null 2>&1 || true
         endscript
       }
-      
       /var/log/vault/*.log {
         daily
         rotate 14
@@ -46,4 +45,3 @@
       }
     mode: "0644"
   become: true
-

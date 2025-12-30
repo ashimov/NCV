@@ -1,3 +1,4 @@
+---
 nomad_version: "1.11.1"
 nomad_package: >-
   {{
@@ -31,7 +32,11 @@ nomad_retry_join_cloud_enabled: false
 nomad_retry_join_cloud: []
 
 nomad_consul_enabled: true
-nomad_consul_address: "127.0.0.1:8500"
+nomad_consul_address: >-
+  127.0.0.1:{{
+    (consul_tls_enabled | default(true))
+      | ternary(consul_https_port, consul_http_port)
+  }}
 nomad_consul_token: ""
 nomad_consul_tls_enabled: "{{ consul_tls_enabled | default(false) }}"
 nomad_consul_tls_dir: /etc/nomad.d/consul-tls

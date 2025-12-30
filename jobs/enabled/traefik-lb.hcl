@@ -36,6 +36,51 @@ variable "dashboard_port" {
   default = 8080
 }
 
+variable "consul_catalog_address" {
+  type    = string
+  default = "127.0.0.1:8501"
+}
+
+variable "consul_catalog_scheme" {
+  type    = string
+  default = "https"
+}
+
+variable "consul_tls_insecure" {
+  type    = bool
+  default = false
+}
+
+variable "consul_tls_ca_src" {
+  type    = string
+  default = "/etc/consul.d/tls/ca.pem"
+}
+
+variable "consul_tls_cert_src" {
+  type    = string
+  default = "/etc/consul.d/tls/cert.pem"
+}
+
+variable "consul_tls_key_src" {
+  type    = string
+  default = "/etc/consul.d/tls/key.pem"
+}
+
+variable "consul_tls_ca_file" {
+  type    = string
+  default = "/secrets/consul/ca.pem"
+}
+
+variable "consul_tls_cert_file" {
+  type    = string
+  default = "/secrets/consul/cert.pem"
+}
+
+variable "consul_tls_key_file" {
+  type    = string
+  default = "/secrets/consul/key.pem"
+}
+
 variable "domain" {
   type    = string
   default = "ashimov.com"
@@ -56,9 +101,10 @@ variable "cloudflare_email" {
   default = "berik@ashimov.com"
 }
 
+# Required for ACME DNS challenge
 variable "cloudflare_api_token" {
   type    = string
-  default = "N2fow3H2yoXewF7HMNxBHwSx_3d43dILPF-WxqQf"
+  default = ""
 }
 
 variable "vault_domain" {
@@ -68,8 +114,43 @@ variable "vault_domain" {
 
 variable "vault_backend" {
   type    = string
-  # List of Vault servers
-  default = "10.44.103.101:8200,10.44.103.102:8200,10.44.103.103:8200"
+  # Comma-separated list of Vault server URLs
+  default = "https://vault.service.consul:8200"
+}
+
+variable "vault_tls_ca_src" {
+  type    = string
+  default = "/etc/vault.d/tls/ca.pem"
+}
+
+variable "vault_tls_cert_src" {
+  type    = string
+  default = "/etc/vault.d/tls/cert.pem"
+}
+
+variable "vault_tls_key_src" {
+  type    = string
+  default = "/etc/vault.d/tls/key.pem"
+}
+
+variable "vault_tls_insecure" {
+  type    = bool
+  default = false
+}
+
+variable "vault_tls_ca_file" {
+  type    = string
+  default = "/secrets/vault/ca.pem"
+}
+
+variable "vault_tls_cert_file" {
+  type    = string
+  default = "/secrets/vault/cert.pem"
+}
+
+variable "vault_tls_key_file" {
+  type    = string
+  default = "/secrets/vault/key.pem"
 }
 
 variable "auth_domain" {
@@ -77,12 +158,26 @@ variable "auth_domain" {
   default = "auth.ashimov.com"
 }
 
-# Dashboard credentials - generate with: htpasswd -nB admin
-# Then escape $ with $$
+variable "keycloak_domain" {
+  type    = string
+  default = "keycloak.ashimov.com"
+}
+
+variable "keycloak_backend" {
+  type    = string
+  default = "http://keycloak.service.consul:8180"
+}
+
+variable "forward_auth_backend" {
+  type    = string
+  default = "http://127.0.0.1:4181"
+}
+
+# Dashboard credentials - generate with: htpasswd -nB admin (escape $ with $$)
+# Optional basic auth for the local dashboard entrypoint
 variable "dashboard_auth" {
   type    = string
-  default = "admin:$$2y$$05$$LhayLxezLhK8hS6oPm.VyODzVnGBnFL3MBNv7jKl5A0rMmrd.r86K"
-  # Default password: admin123 - CHANGE IN PRODUCTION!
+  default = ""
 }
 
 job "traefik-lb" {
@@ -156,7 +251,7 @@ job "traefik-lb" {
           # API and Dashboard
           "--api=true",
           "--api.dashboard=true",
-          "--api.insecure=true",
+          "--api.insecure=false",
           
           # Ping for healthchecks
           "--ping=true",
@@ -197,7 +292,12 @@ job "traefik-lb" {
           
           # Consul Catalog provider for automatic service discovery
           "--providers.consulcatalog=true",
-          "--providers.consulcatalog.endpoint.address=127.0.0.1:8500",
+          "--providers.consulcatalog.endpoint.address=${var.consul_catalog_address}",
+          "--providers.consulcatalog.endpoint.scheme=${var.consul_catalog_scheme}",
+          "--providers.consulcatalog.endpoint.tls.ca=${var.consul_tls_ca_file}",
+          "--providers.consulcatalog.endpoint.tls.cert=${var.consul_tls_cert_file}",
+          "--providers.consulcatalog.endpoint.tls.key=${var.consul_tls_key_file}",
+          "--providers.consulcatalog.endpoint.tls.insecureSkipVerify=${var.consul_tls_insecure}",
           "--providers.consulcatalog.exposedByDefault=false",
           "--providers.consulcatalog.prefix=traefik",
           "--providers.consulcatalog.defaultrule=Host(`{{ .Name }}.${var.domain}`)",
@@ -214,19 +314,68 @@ job "traefik-lb" {
         CF_DNS_API_TOKEN = var.cloudflare_api_token
       }
 
+      template {
+        data = <<EOF
+{{ file "${var.consul_tls_ca_src}" }}
+EOF
+        destination = "secrets/consul/ca.pem"
+        perms = "0600"
+      }
+
+      template {
+        data = <<EOF
+{{ file "${var.consul_tls_cert_src}" }}
+EOF
+        destination = "secrets/consul/cert.pem"
+        perms = "0600"
+      }
+
+      template {
+        data = <<EOF
+{{ file "${var.consul_tls_key_src}" }}
+EOF
+        destination = "secrets/consul/key.pem"
+        perms = "0600"
+      }
+
+      template {
+        data = <<EOF
+{{ file "${var.vault_tls_ca_src}" }}
+EOF
+        destination = "secrets/vault/ca.pem"
+        perms = "0600"
+      }
+
+      template {
+        data = <<EOF
+{{ file "${var.vault_tls_cert_src}" }}
+EOF
+        destination = "secrets/vault/cert.pem"
+        perms = "0600"
+      }
+
+      template {
+        data = <<EOF
+{{ file "${var.vault_tls_key_src}" }}
+EOF
+        destination = "secrets/vault/key.pem"
+        perms = "0600"
+      }
+
       # Dynamic configuration
       template {
         data = <<EOF
 http:
   middlewares:
+%{ if var.dashboard_auth != "" }
     dashboard-auth:
       basicAuth:
         users:
           - "${var.dashboard_auth}"
-    
+%{ endif }
     keycloak-auth:
       forwardAuth:
-        address: "http://127.0.0.1:4181"
+        address: "${var.forward_auth_backend}"
         trustForwardHeader: true
         authResponseHeaders:
           - X-Forwarded-User
@@ -262,7 +411,7 @@ http:
         - security-headers
       tls:
         certResolver: letsencrypt
-
+%{ if var.dashboard_auth != "" }
     dashboard-http:
       rule: "Host(`${var.dashboard_domain}`)"
       entryPoints:
@@ -270,9 +419,10 @@ http:
       service: api@internal
       middlewares:
         - dashboard-auth
+%{ endif }
 
     keycloak:
-      rule: "Host(`keycloak.ashimov.com`)"
+      rule: "Host(`${var.keycloak_domain}`)"
       entryPoints:
         - websecure
       service: keycloak
@@ -280,7 +430,7 @@ http:
         certResolver: letsencrypt
 
     keycloak-http:
-      rule: "Host(`keycloak.ashimov.com`)"
+      rule: "Host(`${var.keycloak_domain}`)"
       entryPoints:
         - web
       service: keycloak
@@ -309,24 +459,34 @@ http:
     keycloak:
       loadBalancer:
         servers:
-          - url: "http://10.44.103.103:8180"
+          - url: "${var.keycloak_backend}"
 
     forward-auth:
       loadBalancer:
         servers:
-          - url: "http://127.0.0.1:4181"
+          - url: "${var.forward_auth_backend}"
 
     # Vault cluster servers
     vault:
       loadBalancer:
         servers:
-          - url: "https://10.44.103.101:8200"
-          - url: "https://10.44.103.102:8200"
-        serversTransport: insecureTransport
+%{ for backend in split(",", var.vault_backend) ~}
+          - url: "${trimspace(backend)}"
+%{ endfor ~}
+        serversTransport: vaultTransport
 
   serversTransports:
-    insecureTransport:
-      insecureSkipVerify: true
+    vaultTransport:
+      insecureSkipVerify: ${var.vault_tls_insecure}
+%{ if var.vault_tls_ca_file != "" }
+      rootCAs:
+        - "${var.vault_tls_ca_file}"
+%{ endif }
+%{ if var.vault_tls_cert_file != "" && var.vault_tls_key_file != "" }
+      certificates:
+        - certFile: "${var.vault_tls_cert_file}"
+          keyFile: "${var.vault_tls_key_file}"
+%{ endif }
 
 tls:
   options:

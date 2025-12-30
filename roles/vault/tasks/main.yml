@@ -76,17 +76,6 @@
   become: true
   no_log: true
 
-- name: Render Vault configuration
-  ansible.builtin.template:
-    src: vault.hcl.j2
-    dest: "{{ vault_config_file }}"
-    owner: "{{ vault_user }}"
-    group: "{{ vault_group }}"
-    mode: "0640"
-  notify: Restart vault
-  become: true
-  no_log: true
-
 - name: Configure and start Vault service
   block:
     - name: Backup existing Vault configuration
@@ -99,11 +88,21 @@
       failed_when: false
       become: true
 
+    - name: Render Vault configuration
+      ansible.builtin.template:
+        src: vault.hcl.j2
+        dest: "{{ vault_config_file }}"
+        owner: "{{ vault_user }}"
+        group: "{{ vault_group }}"
+        mode: "0640"
+      notify: Restart vault
+      become: true
+      no_log: true
+
     - name: Validate Vault configuration
       ansible.builtin.command: vault server -config={{ vault_config_file }} -test
       changed_when: false
       become: true
-      failed_when: false
 
     - name: Ensure systemd override directory
       ansible.builtin.file:
@@ -136,7 +135,8 @@
     - name: Wait for Vault to be ready
       ansible.builtin.uri:
         url: "{{ vault_api_addr }}/v1/sys/health"
-        validate_certs: false
+        validate_certs: "{{ vault_tls_enabled | default(true) }}"
+        ca_path: "{{ (vault_tls_enabled | default(true)) | ternary(vault_tls_dir + '/ca.pem', omit) }}"
         status_code: [200, 429, 501, 503]
       register: vault_ready
       until: vault_ready.status in [200, 429, 501, 503]

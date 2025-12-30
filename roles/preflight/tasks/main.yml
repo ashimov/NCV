@@ -21,8 +21,16 @@
               ansible_facts["os_family"] == "Debian"
               and ansible_facts["distribution"] in preflight_debian_distributions
               and (
-                (ansible_facts["distribution"] == "Ubuntu" and ansible_facts["distribution_version"] in preflight_ubuntu_versions)
-                or (ansible_facts["distribution"] == "Debian" and ansible_facts["distribution_major_version"] in preflight_debian_versions)
+                (
+                  ansible_facts["distribution"] == "Ubuntu"
+                  and ansible_facts["distribution_version"]
+                    in preflight_ubuntu_versions
+                )
+                or (
+                  ansible_facts["distribution"] == "Debian"
+                  and ansible_facts["distribution_major_version"]
+                    in preflight_debian_versions
+                )
               )
             )
             or
@@ -48,7 +56,13 @@
 
     - name: Build node_ip list
       ansible.builtin.set_fact:
-        preflight_node_ips: "{{ groups['all'] | difference(['localhost']) | map('extract', hostvars, 'node_ip') | list }}"
+        preflight_node_ips: >-
+          {{
+            groups['all']
+            | difference(['localhost'])
+            | map('extract', hostvars, 'node_ip')
+            | list
+          }}
       run_once: true
 
     - name: Assert node_ip values are unique
@@ -99,7 +113,7 @@
           - pki_target_groups | length > 0
           - (pki_target_groups | difference(groups.keys() | list)) | length == 0
         fail_msg: "pki_target_groups must reference existing inventory groups."
-      when: 
+      when:
         - preflight_require_pki | bool
         - pki_generate is defined
         - pki_generate | bool
@@ -113,6 +127,7 @@
         - consul_encrypt is defined
         - consul_encrypt | length == 0
       run_once: true
+
     - name: Check minimum RAM requirement
       ansible.builtin.assert:
         that:
@@ -163,10 +178,12 @@
         - 8502  # Consul gRPC
       when:
         - preflight_check_ports | bool
-        - inventory_hostname in groups.get('consul_servers', []) or inventory_hostname in groups.get('consul_clients', [])
-      ignore_errors: yes
-      register: consul_ports_check
-      failed_when: false
+        - >-
+          inventory_hostname in groups.get('consul_servers', [])
+          or inventory_hostname in groups.get('consul_clients', [])
+      register: preflight_consul_ports_check
+      ignore_errors: true
+      changed_when: false
 
     - name: Check if required ports are available (Nomad)
       ansible.builtin.wait_for:
@@ -179,10 +196,12 @@
         - 4648  # Nomad Serf
       when:
         - preflight_check_ports | bool
-        - inventory_hostname in groups.get('nomad_servers', []) or inventory_hostname in groups.get('nomad_clients', [])
-      ignore_errors: yes
-      register: nomad_ports_check
-      failed_when: false
+        - >-
+          inventory_hostname in groups.get('nomad_servers', [])
+          or inventory_hostname in groups.get('nomad_clients', [])
+      register: preflight_nomad_ports_check
+      ignore_errors: true
+      changed_when: false
 
     - name: Check if required ports are available (Vault)
       ansible.builtin.wait_for:
@@ -195,9 +214,43 @@
       when:
         - preflight_check_ports | bool
         - inventory_hostname in groups.get('vault_servers', [])
-      ignore_errors: yes
-      register: vault_ports_check
-      failed_when: false
+      register: preflight_vault_ports_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Determine port conflicts
+      ansible.builtin.set_fact:
+        preflight_consul_ports_conflict: >-
+          {{
+            (
+              preflight_consul_ports_check.results
+              | default([])
+              | selectattr('failed', 'equalto', true)
+              | list
+              | length
+            ) > 0
+          }}
+        preflight_nomad_ports_conflict: >-
+          {{
+            (
+              preflight_nomad_ports_check.results
+              | default([])
+              | selectattr('failed', 'equalto', true)
+              | list
+              | length
+            ) > 0
+          }}
+        preflight_vault_ports_conflict: >-
+          {{
+            (
+              preflight_vault_ports_check.results
+              | default([])
+              | selectattr('failed', 'equalto', true)
+              | list
+              | length
+            ) > 0
+          }}
+      when: preflight_check_ports | bool
 
     - name: Warn about port conflicts
       ansible.builtin.debug:
@@ -206,18 +259,16 @@
           Please verify manually or stop conflicting services before proceeding.
       when:
         - preflight_check_ports | bool
-        - (consul_ports_check is defined and consul_ports_check is failed) or
-          (nomad_ports_check is defined and nomad_ports_check is failed) or
-          (vault_ports_check is defined and vault_ports_check is failed)
+        - preflight_consul_ports_conflict | default(false) or
+          preflight_nomad_ports_conflict | default(false) or
+          preflight_vault_ports_conflict | default(false)
 
     - name: Warn about raw_exec driver risks
-      ansible.builtin.assert:
-        that:
-          - not (nomad_enable_raw_exec | default(false))
-        fail_msg: >-
+      ansible.builtin.debug:
+        msg: >-
           SECURITY WARNING: raw_exec driver is enabled!
           This allows arbitrary command execution and should only be used in trusted environments.
           Set nomad_enable_raw_exec=false unless absolutely necessary.
-        success_msg: "raw_exec driver is disabled (secure default)."
-      when: preflight_warn_on_insecure_defaults | bool
-      ignore_errors: yes
+      when:
+        - preflight_warn_on_insecure_defaults | bool
+        - nomad_enable_raw_exec | default(false)

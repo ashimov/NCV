@@ -171,7 +171,7 @@
         src: "{{ item.path }}"
         dest: "{{ nomad_cni_bin_dir }}/{{ item.path | basename }}"
         state: link
-        force: yes
+        force: true
       loop: "{{ nomad_cni_plugins.files }}"
       become: true
       when: nomad_cni_plugins.files | length > 0
@@ -183,7 +183,14 @@
   block:
     - name: Download CNI plugins (Debian)
       ansible.builtin.get_url:
-        url: "https://github.com/containernetworking/plugins/releases/download/v{{ nomad_cni_version }}/cni-plugins-linux-amd64-v{{ nomad_cni_version }}.tgz"
+        url: >-
+          {{
+            'https://github.com/containernetworking/plugins/releases/download/v'
+            ~ nomad_cni_version
+            ~ '/cni-plugins-linux-amd64-v'
+            ~ nomad_cni_version
+            ~ '.tgz'
+          }}
         dest: "/tmp/cni-plugins-{{ nomad_cni_version }}.tgz"
         mode: "0644"
       become: true
@@ -340,9 +347,9 @@
         ca_path: "{{ nomad_tls_dir }}/ca.pem"
         client_cert: "{{ nomad_tls_dir }}/cert.pem"
         client_key: "{{ nomad_tls_dir }}/key.pem"
-        return_content: yes
+        return_content: true
         status_code: 200
-        validate_certs: yes
+        validate_certs: true
       register: nomad_ready
       until: nomad_ready.status == 200
       retries: 30

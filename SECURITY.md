@@ -44,7 +44,7 @@ vault_consul_encrypt: "your-consul-encryption-key-here"
 vault_nomad_consul_token: "your-nomad-consul-token-here"
 
 # Vault Consul token (generate via Consul ACL)
-vault_vault_consul_token: "your-vault-consul-token-here"
+vault_consul_token_secret: "your-vault-consul-token-here"
 
 # Other sensitive variables
 vault_acl_master_token: "your-master-acl-token"
@@ -56,7 +56,7 @@ vault_acl_master_token: "your-master-acl-token"
 # group_vars/all.yml
 consul_encrypt: "{{ vault_consul_encrypt | default('') }}"
 nomad_consul_token: "{{ vault_nomad_consul_token | default('') }}"
-vault_consul_token: "{{ vault_vault_consul_token | default('') }}"
+vault_consul_token: "{{ vault_consul_token_secret | default('') }}"
 ```
 
 #### 4. Configure Ansible to Use Vault Password

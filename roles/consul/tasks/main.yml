@@ -109,13 +109,15 @@
 - name: Extract encrypt key from existing config
   ansible.builtin.set_fact:
     consul_existing_encrypt_key: >-
-      {%- if consul_existing_config.content is defined -%}
-        {%- set decoded = consul_existing_config.content | b64decode | default('') -%}
-        {%- set match = decoded | regex_search('encrypt\s*=\s*"([^"]+)"', '\\1') -%}
-        {{ (match | first) if match else '' }}
-      {%- else -%}
-        {{ '' }}
-      {%- endif -%}
+      {{
+        consul_existing_config.content
+        | default('')
+        | b64decode
+        | regex_search('encrypt\s*=\s*"([^"]+)"', '\\1')
+        | default([])
+        | first
+        | default('')
+      }}
   when: consul_config_stat.stat.exists | default(false)
 
 - name: Detect encrypt key change

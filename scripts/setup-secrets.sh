@@ -89,7 +89,7 @@ vault_nomad_consul_token: "$NOMAD_TOKEN"
 
 # Vault Consul storage token
 # TODO: Replace with actual ACL token from: consul acl token create
-vault_vault_consul_token: "$VAULT_TOKEN"
+vault_consul_token_secret: "$VAULT_TOKEN"
 
 # Consul ACL tokens (optional)
 vault_consul_acl_agent_token: ""

@@ -45,7 +45,7 @@ vault_consul_encrypt: "YOUR-CONSUL-ENCRYPTION-KEY"
 
 # Generate via Consul ACL
 vault_nomad_consul_token: "YOUR-NOMAD-TOKEN"
-vault_vault_consul_token: "YOUR-VAULT-TOKEN"
+vault_consul_token_secret: "YOUR-VAULT-TOKEN"
 ```
 
 ### Step 5: Verify Configuration

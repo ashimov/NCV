@@ -11,6 +11,7 @@ Complete reference for all configurable variables in the NCV Ansible project.
 - [Consul Variables](#consul-variables)
 - [Nomad Variables](#nomad-variables)
 - [Vault Variables](#vault-variables)
+- [Backup Variables](#backup-variables)
 - [Firewall Variables](#firewall-variables)
 - [Nomad Jobs Variables](#nomad-jobs-variables)
 - [Load Balancer Variables](#load-balancer-variables)
@@ -73,6 +74,7 @@ Defined in `roles/cleanup/defaults/main.yml`:
 |---|---|---|
 | `pki_generate` | `true` | Enable automatic CA and certificate generation |
 | `pki_root` | `{{ playbook_dir }}/pki` | Root directory for PKI artifacts |
+| `pki_consul_datacenter` | `{{ consul_datacenter | default('dc1') }}` | Consul datacenter used for SAN generation |
 | `pki_ca_dir` | `{{ pki_root }}/ca` | CA certificate directory |
 | `pki_hosts_dir` | `{{ pki_root }}/hosts` | Host certificates directory |
 | `pki_ca_key_size` | `4096` | CA private key size in bits |
@@ -133,7 +135,7 @@ Each service (Consul, Nomad, Vault) has similar TLS variables:
 | `nomad_retry_join` | Auto-detected | List of servers to join |
 | `nomad_retry_join_cloud_enabled` | `false` | Enable cloud auto-join |
 | `nomad_consul_enabled` | `true` | Enable Consul integration |
-| `nomad_consul_address` | `127.0.0.1:8500` | Consul agent address |
+| `nomad_consul_address` | `127.0.0.1:8501` | Consul agent address (HTTPS by default) |
 | `nomad_consul_tls_enabled` | Auto-detected | Use TLS for Consul |
 | `nomad_enable_raw_exec` | `false` | Enable raw_exec driver |
 | `nomad_acl_enabled` | `false` | Enable ACL system |
@@ -144,18 +146,42 @@ Each service (Consul, Nomad, Vault) has similar TLS variables:
 |---|---|---|
 | `vault_version` | `1.21.1` | Vault version to install |
 | `vault_storage_backend` | `consul` | Storage: `consul` or `raft` |
-| `vault_consul_address` | `127.0.0.1:8500` | Consul address |
-| `vault_consul_token` | `""` | Consul ACL token (read from `vault_consul_token_vaulted` when set) |
-| `vault_consul_token_vaulted` | `""` | Consul ACL token (store with Ansible Vault) |
+| `vault_consul_address` | `127.0.0.1:8501` | Consul address (HTTPS by default) |
+| `vault_consul_token` | `""` | Consul ACL token (read from `vault_consul_token_secret` when set) |
+| `vault_consul_token_secret` | `""` | Consul ACL token (store with Ansible Vault) |
 | `vault_seal_type` | `none` | Seal: `none`, `awskms`, `gcpckms`, `transit` |
 | `vault_seal_config` | `{}` | Seal-specific configuration |
 | `vault_ui` | `true` | Enable web UI |
+
+## Backup Variables
+
+Defined in `roles/backup/defaults/main.yml`:
+
+| Variable | Default | Description |
+|---|---|---|
+| `backup_enabled` | `false` | Master enable/disable switch |
+| `backup_dir` | `{{ playbook_dir }}/backups` | Local backup storage directory (control node) |
+| `backup_timestamp_format` | `%Y%m%d_%H%M%S` | Snapshot timestamp format |
+| `backup_tmp_dir` | `/var/tmp/ncv-backups` | Temporary backup directory on target hosts |
+| `backup_consul_enabled` | `true` | Enable Consul backups |
+| `backup_consul_snapshot` | `true` | Create Consul snapshots |
+| `backup_consul_token` | `""` | Consul ACL token for snapshot access |
+| `backup_nomad_enabled` | `true` | Enable Nomad backups |
+| `backup_nomad_snapshot` | `true` | Create Nomad snapshots |
+| `backup_nomad_token` | `""` | Nomad ACL token for snapshot access |
+| `backup_vault_enabled` | `false` | Enable Vault backups |
+| `backup_vault_snapshot` | `false` | Create Vault snapshots |
+| `backup_vault_token` | `""` | Vault token for snapshot access |
+| `backup_keep_days` | `7` | Number of days to keep backups |
+| `backup_compression` | `true` | Compress backups with gzip |
+
+Note: Vault snapshots require `vault_storage_backend: raft` and an unsealed Vault.
 
 ## Firewall Variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `firewall_enabled` | `false` | Enable firewall configuration |
+| `firewall_enabled` | `true` | Enable firewall configuration |
 | `firewall_backend` | `auto` | Backend: `auto`, `ufw`, `firewalld` |
 | `firewall_allow_cidrs` | `[]` | List of allowed CIDR blocks |
 
@@ -164,7 +190,7 @@ Each service (Consul, Nomad, Vault) has similar TLS variables:
 | Variable | Default | Description |
 |---|---|---|
 | `nomad_jobs_enabled` | `false` | Enable job deployment |
-| `nomad_jobs_dir` | `{{ playbook_dir }}/jobs` | Job files directory |
+| `nomad_jobs_dir` | `{{ playbook_dir }}/jobs` | Job files directory (set to `jobs/enabled` for curated auto-deploy) |
 | `nomad_jobs_nomad_addr` | `https://127.0.0.1:4646` | Nomad API address |
 | `nomad_jobs_nomad_token` | `""` | Nomad ACL token |
 

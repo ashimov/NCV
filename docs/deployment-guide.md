@@ -274,6 +274,12 @@ job "traefik" {
 }
 ```
 
+> Примечание: Traefik по умолчанию подключается к Consul/Vault через mTLS и
+> ожидает сертификаты на хосте в `/etc/consul.d/tls` и `/etc/vault.d/tls`
+> (они монтируются в `/secrets/consul` и `/secrets/vault` внутри контейнера).
+> При необходимости переопределите `consul_tls_*_src` и `vault_tls_*_src`
+> в job файле.
+
 ### Шаг 2: Создание dynamic config
 
 Создайте файл конфигурации в директории `dynamic/config.yml`:

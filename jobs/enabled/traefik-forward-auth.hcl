@@ -21,16 +21,16 @@ variable "client_id" {
   default = "traefik"
 }
 
-# UPDATE THIS after running setup-keycloak.sh
+# Required: set after running setup-keycloak.sh
 variable "client_secret" {
   type    = string
-  default = "Rily2DDbS4UpYjLotEmtMLA5EbSOvfic"
+  default = ""
 }
 
-# Generate with: openssl rand -hex 32
+# Required: generate with `openssl rand -hex 32`
 variable "secret" {
   type    = string
-  default = "e8f4a2b6c9d1e7f3a5b8c2d4e6f9a1b3c5d7e9f2a4b6c8d1e3f5a7b9c2d4e6f8"
+  default = ""
 }
 
 variable "cookie_domain" {
@@ -46,7 +46,7 @@ variable "auth_host" {
 # Whitelist for allowed email domains/addresses
 variable "whitelist" {
   type    = string
-  default = "berik@ashimov.com"
+  default = ""
 }
 
 job "traefik-forward-auth" {
